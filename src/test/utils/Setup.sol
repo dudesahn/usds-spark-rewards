@@ -4,8 +4,7 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {Strategy, ERC20} from "../../Strategy.sol";
-import {StrategyFactory} from "../../StrategyFactory.sol";
+import {SparkCompounder, ERC20} from "../../Strategy.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 
 // Inherit the events so they can be checked if desired.
@@ -24,8 +23,6 @@ contract Setup is Test, IEvents {
     ERC20 public asset;
     IStrategyInterface public strategy;
 
-    StrategyFactory public strategyFactory;
-
     mapping(string => address) public tokenAddrs;
 
     // Addresses for different roles we will use repeatedly.
@@ -34,6 +31,9 @@ contract Setup is Test, IEvents {
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
     address public emergencyAdmin = address(5);
+
+    // Address of the staking contract
+    address public staking;
 
     // Address of the real deployed Factory
     address public factory;
@@ -53,17 +53,11 @@ contract Setup is Test, IEvents {
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["DAI"]);
+        asset = ERC20(tokenAddrs["USDS"]);
 
         // Set decimals
         decimals = asset.decimals();
-
-        strategyFactory = new StrategyFactory(
-            management,
-            performanceFeeRecipient,
-            keeper,
-            emergencyAdmin
-        );
+        staking = 0x173e314C7635B45322cd8Cb14f44b312e079F3af;
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
@@ -81,17 +75,25 @@ contract Setup is Test, IEvents {
 
     function setUpStrategy() public returns (address) {
         // we save the strategy as a IStrategyInterface to give it the needed interface
+        vm.startPrank(management);
         IStrategyInterface _strategy = IStrategyInterface(
             address(
-                strategyFactory.newStrategy(
+                new SparkCompounder(
                     address(asset),
-                    "Tokenized Strategy"
+                    "USDS Spark Compounder",
+                    staking
                 )
             )
         );
 
-        vm.prank(management);
-        _strategy.acceptManagement();
+        // setup the strategy
+        _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
+        _strategy.setKeeper(keeper);
+        _strategy.setEmergencyAdmin(emergencyAdmin);
+
+        // turn on open deposits
+        _strategy.setOpenDeposits(true);
+        vm.stopPrank();
 
         return address(_strategy);
     }
@@ -163,5 +165,6 @@ contract Setup is Test, IEvents {
         tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        tokenAddrs["USDS"] = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
     }
 }

@@ -13,7 +13,7 @@ inspect :; forge inspect ${contract} storageLayout
 FORK_URL := ${ETH_RPC_URL} # BASE_RPC_URL, ETH_RPC_URL, ARBITRUM_RPC_URL
 
 # if we want to run only matching tests, set that here
-test := test_
+test := test_profitableReport
 
 # local tests without fork
 test  :; forge test -vv --fork-url ${FORK_URL}
