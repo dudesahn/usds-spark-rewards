@@ -3,14 +3,22 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Setup} from "./utils/Setup.sol";
 
-import {StrategyAprOracle} from "../periphery/StrategyAprOracle.sol";
+import {SparkCompounderAprOracle} from "src/periphery/StrategyAprOracle.sol";
 
 contract OracleTest is Setup {
-    StrategyAprOracle public oracle;
+    SparkCompounderAprOracle public oracle;
 
     function setUp() public override {
         super.setUp();
-        oracle = new StrategyAprOracle();
+        oracle = new SparkCompounderAprOracle();
+    }
+
+    function testSimpleOracleCheck() public {
+        // Check set up
+        // TODO: Add checks for the setup
+
+        uint256 currentApr = oracle.aprAfterDebtChange(address(strategy), 0);
+        console2.log("currentAPR:", currentApr);
     }
 
     function checkOracle(address _strategy, uint256 _delta) public {
