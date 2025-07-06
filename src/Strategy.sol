@@ -8,10 +8,10 @@ import {Auction} from "@periphery/Auctions/Auction.sol";
 import {IStaking} from "src/interfaces/IStaking.sol";
 import {IPsmWrapper} from "src/interfaces/IPsmWrapper.sol";
 
-contract SparkCompounder is BaseHealthCheck, UniswapV3Swapper {
+contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     using SafeERC20 for ERC20;
 
-    ///@notice yearn's referral code
+    /// @notice yearn's referral code
     uint16 public referral = 1007;
 
     /// @notice Address of the specific Auction this strategy uses.
@@ -26,11 +26,12 @@ contract SparkCompounder is BaseHealthCheck, UniswapV3Swapper {
     /// @notice Mapping of addresses and whether they are allowed to deposit to this strategy
     mapping(address => bool) public allowed;
 
-    /// @notice Staking contract we use
-    IStaking public immutable staking;
-
     /// @notice Reward token we get for staking
     address public immutable rewardsToken;
+
+    /// @notice Staking contract we use
+    IStaking public constant staking =
+        IStaking(0x173e314C7635B45322cd8Cb14f44b312e079F3af);
 
     /// @notice Wrapper for PSM with USDS
     IPsmWrapper internal constant PSM_WRAPPER =
@@ -39,21 +40,16 @@ contract SparkCompounder is BaseHealthCheck, UniswapV3Swapper {
     /// @notice Don't bother spending the gas to stake dust
     uint256 internal constant DUST = 1e18;
 
-    constructor(
-        address _asset,
-        string memory _name,
-        address _staking
-    ) BaseHealthCheck(_asset, _name) {
-        require(IStaking(_staking).paused() == false, "paused");
-        require(_asset == IStaking(_staking).stakingToken(), "!stakingToken");
-        rewardsToken = IStaking(_staking).rewardsToken();
-        staking = IStaking(_staking);
+    constructor() BaseHealthCheck(PSM_WRAPPER.usds(), "Spark USDS Compounder") {
+        require(staking.paused() == false, "!paused");
+        require(PSM_WRAPPER.usds() == staking.stakingToken(), "!stakingToken");
+        rewardsToken = staking.rewardsToken();
 
         // approve staking contract and our PSM wrapper
-        asset.forceApprove(_staking, type(uint256).max);
+        asset.forceApprove(address(staking), type(uint256).max);
 
         // use USDC for our UniV3 swaps and then send it through the PSM for USDS
-        address usdc = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        address usdc = PSM_WRAPPER.gem();
         ERC20(usdc).forceApprove(address(PSM_WRAPPER), type(uint).max); //approve the PSM
 
         // Set the min amount for the swapper/auction to sell
@@ -99,16 +95,21 @@ contract SparkCompounder is BaseHealthCheck, UniswapV3Swapper {
         // get our rewards. if no rewards is a noop so no worries about reverts
         staking.getReward();
 
+        // store in memory to save gas
+        uint256 toSwap = balanceOfRewards();
+
         if (!useAuction) {
-            // swap if using UniV3 to sell rewards
-            _swapFrom(rewardsToken, base, balanceOfRewards(), 0);
-            // use PSM to go from USDC to USDS for free, assuming psm.tin() stays zero
-            PSM_WRAPPER.sellGem(
-                address(this),
-                ERC20(base).balanceOf(address(this))
-            );
-        } else if (balanceOfRewards() > minAmountToSell) {
-            _kickAuction(rewardsToken, balanceOfRewards());
+            if (toSwap > minAmountToSell) {
+                // swap if using UniV3 to sell rewards
+                _swapFrom(rewardsToken, base, toSwap, 0);
+                // use PSM to go from USDC to USDS for free, assuming psm.tin() stays zero
+                PSM_WRAPPER.sellGem(
+                    address(this),
+                    ERC20(base).balanceOf(address(this))
+                );
+            }
+        } else if (toSwap > minAmountToSell) {
+            _kickAuction(rewardsToken, toSwap);
         }
 
         uint256 balance = balanceOfAsset();
