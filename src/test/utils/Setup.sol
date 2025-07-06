@@ -77,13 +77,7 @@ contract Setup is Test, IEvents {
         // we save the strategy as a IStrategyInterface to give it the needed interface
         vm.startPrank(management);
         IStrategyInterface _strategy = IStrategyInterface(
-            address(
-                new SparkCompounder(
-                    address(asset),
-                    "USDS Spark Compounder",
-                    staking
-                )
-            )
+            address(new SparkCompounder())
         );
 
         // setup the strategy
