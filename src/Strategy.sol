@@ -30,7 +30,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     address public immutable rewardsToken;
 
     /// @notice Staking contract we use
-    IStaking public constant staking =
+    IStaking public constant STAKING =
         IStaking(0x173e314C7635B45322cd8Cb14f44b312e079F3af);
 
     /// @notice Wrapper for PSM with USDS
