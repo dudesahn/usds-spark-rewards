@@ -41,12 +41,12 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     uint256 internal constant DUST = 1e18;
 
     constructor() BaseHealthCheck(PSM_WRAPPER.usds(), "Spark USDS Compounder") {
-        require(staking.paused() == false, "!paused");
-        require(PSM_WRAPPER.usds() == staking.stakingToken(), "!stakingToken");
-        rewardsToken = staking.rewardsToken();
+        require(STAKING.paused() == false, "!paused");
+        require(PSM_WRAPPER.usds() == STAKING.stakingToken(), "!stakingToken");
+        rewardsToken = STAKING.rewardsToken();
 
         // approve staking contract and our PSM wrapper
-        asset.forceApprove(address(staking), type(uint256).max);
+        asset.forceApprove(address(STAKING), type(uint256).max);
 
         // use USDC for our UniV3 swaps and then send it through the PSM for USDS
         address usdc = PSM_WRAPPER.gem();
@@ -65,7 +65,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     }
 
     function balanceOfStake() public view returns (uint256 _amount) {
-        return staking.balanceOf(address(this));
+        return STAKING.balanceOf(address(this));
     }
 
     function balanceOfRewards() public view returns (uint256) {
@@ -73,18 +73,18 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     }
 
     function claimableRewards() public view returns (uint256) {
-        return staking.earned(address(this));
+        return STAKING.earned(address(this));
     }
 
     /* ========== CORE STRATEGY FUNCTIONS ========== */
 
     function _deployFunds(uint256 _amount) internal override {
         // technically should check if staking is paused here, but not really worth the gas
-        staking.stake(_amount, referral);
+        STAKING.stake(_amount, referral);
     }
 
     function _freeFunds(uint256 _amount) internal override {
-        staking.withdraw(_amount);
+        STAKING.withdraw(_amount);
     }
 
     function _harvestAndReport()
@@ -93,7 +93,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
         returns (uint256 _totalAssets)
     {
         // get our rewards. if no rewards is a noop so no worries about reverts
-        staking.getReward();
+        STAKING.getReward();
 
         // store in memory to save gas
         uint256 toSwap = balanceOfRewards();
@@ -129,7 +129,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     function availableDepositLimit(
         address _receiver
     ) public view override returns (uint256) {
-        if (staking.paused()) {
+        if (STAKING.paused()) {
             return 0;
         } else if (openDeposits || allowed[_receiver]) {
             return type(uint256).max;
@@ -149,7 +149,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
         uint256 rewardsBalance;
 
         if (_token == rewardsToken) {
-            staking.getReward();
+            STAKING.getReward();
             rewardsBalance = balanceOfRewards();
         } else {
             rewardsBalance = ERC20(_token).balanceOf(address(this));
