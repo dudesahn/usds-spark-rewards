@@ -24,7 +24,6 @@ contract SparkCompounderAprOracle {
         0xE592427A0AEce92De3Edee1F18E0157C05861564;
 
     uint256 internal constant SECONDS_PER_YEAR = 31536000;
-    uint256 internal constant WAD = 1e18;
 
     /**
      * @param _strategy The strategy to get the apr for. Not a used variable in this case.
