@@ -41,7 +41,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     uint256 internal constant DUST = 1e18;
 
     constructor() BaseHealthCheck(PSM_WRAPPER.usds(), "Spark USDS Compounder") {
-        require(STAKING.paused() == false, "!paused");
+        require(!STAKING.paused(), "!paused");
         require(PSM_WRAPPER.usds() == STAKING.stakingToken(), "!stakingToken");
         rewardsToken = STAKING.rewardsToken();
 
