@@ -14,6 +14,16 @@ interface IStrategyInterface is IBaseHealthCheck {
 
     function referral() external view returns (uint16);
 
+    function STAKING() external view returns (address);
+
+    function REWARDS_TOKEN() external view returns (address);
+
+    function auction() external view returns (address);
+
+    function claimRewards() external;
+
+    function kickAuction(address _token) external;
+
     function minAmountToSell() external view returns (uint256);
 
     function openDeposits() external view returns (bool);
@@ -22,9 +32,15 @@ interface IStrategyInterface is IBaseHealthCheck {
 
     function setMinAmountToSell(uint256 _minAmountToSell) external;
 
+    function setUniV3Fees(uint24 _rewardToBase) external;
+
     function setOpenDeposits(bool _openDeposits) external;
 
     function setAllowed(address _depositor, bool _allowed) external;
 
     function setReferral(uint16 _referral) external;
+
+    function setAuction(address _auction) external;
+
+    function setUseAuction(bool _useAuction) external;
 }
