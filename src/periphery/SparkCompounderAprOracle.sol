@@ -60,8 +60,8 @@ contract SparkCompounderAprOracle {
             assets = assets + uint256(_delta);
         }
 
-        // don't divide by 0
-        if (assets == 0) return 0;
+        // don't divide by 0. if no assets in staking contract, yield would be very good so return 100%
+        if (assets == 0) return 1e18;
 
         oracleApr = (rewardRate * SECONDS_PER_YEAR * output * 1e12) / (assets);
     }

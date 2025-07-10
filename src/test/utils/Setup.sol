@@ -4,8 +4,9 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {SparkCompounder, ERC20} from "src/SparkCompounder.sol";
+import {SparkCompounder, ERC20, Auction, IStaking} from "src/SparkCompounder.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
+import {AuctionFactory} from "@periphery/Auctions/AuctionFactory.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -22,6 +23,11 @@ contract Setup is Test, IEvents {
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
     IStrategyInterface public strategy;
+
+    // auction to be used by our strategy
+    Auction public auction;
+    AuctionFactory public auctionFactory =
+        AuctionFactory(0xCfA510188884F199fcC6e750764FAAbE6e56ec40);
 
     mapping(string => address) public tokenAddrs;
 
@@ -46,8 +52,14 @@ contract Setup is Test, IEvents {
     uint256 public maxFuzzAmount = 1e30;
     uint256 public minFuzzAmount = 10_000;
 
-    // Default profit max unlock time is set for 10 days
-    uint256 public profitMaxUnlockTime = 10 days;
+    // use this as a cutoff to expect when deposits/withdrawals won't cause detectable APR differences
+    uint256 public constant ORACLE_FUZZ_MIN = 1e15;
+
+    // use this as a cutoff to expect when we won't generate meaningful profit
+    uint256 public constant PROFIT_FUZZ_MIN = 10_000e18;
+
+    // set profit max unlock time for 1 days since rewards are paid weekly
+    uint256 public profitMaxUnlockTime = 1 days;
 
     function setUp() public virtual {
         _setTokenAddrs();
@@ -61,6 +73,13 @@ contract Setup is Test, IEvents {
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
+
+        // setup our auction with our rewards token to sell
+        setUpAuction(strategy.REWARDS_TOKEN());
+
+        // set min amount to sell super low for testing ~($1.50)
+        vm.prank(management);
+        strategy.setMinAmountToSell(50e18);
 
         factory = strategy.FACTORY();
 
@@ -84,12 +103,79 @@ contract Setup is Test, IEvents {
         _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
         _strategy.setKeeper(keeper);
         _strategy.setEmergencyAdmin(emergencyAdmin);
+        _strategy.setProfitMaxUnlockTime(profitMaxUnlockTime);
 
-        // turn on open deposits
-        _strategy.setOpenDeposits(true);
+        // check that deposits are closed
+        assertEq(_strategy.availableDepositLimit(user), 0, "!deposit");
+        _strategy.setAllowed(user, true);
+        assertGt(_strategy.availableDepositLimit(user), 0, "!deposit");
+        _strategy.setAllowed(user, false);
         vm.stopPrank();
 
+        // prank owner of staking contract to make sure deposit limit is zero when paused
+        vm.startPrank(0xBE8E3e3618f7474F8cB1d074A26afFef007E98FB);
+        IStaking(_strategy.STAKING()).setPaused(true);
+        assertEq(_strategy.availableDepositLimit(user), 0, "!deposit");
+        IStaking(_strategy.STAKING()).setPaused(false);
+        vm.stopPrank();
+
+        // turn on open deposits
+        vm.prank(management);
+        _strategy.setOpenDeposits(true);
+
         return address(_strategy);
+    }
+
+    function setUpAuction(address _token) public {
+        // deploy auction for the strategy
+        auction = Auction(
+            auctionFactory.createNewAuction(
+                address(asset),
+                address(strategy),
+                management
+            )
+        );
+
+        // enable reward token on our auction
+        vm.prank(management);
+        auction.enable(_token);
+    }
+
+    function simulateAuction(uint256 _profitAmount) public {
+        // cache our rewards token
+        address rewardsToken = strategy.REWARDS_TOKEN();
+
+        // kick the auction
+        vm.prank(keeper);
+        strategy.kickAuction(rewardsToken);
+
+        // check for reward token balance in auction
+        uint256 rewardBalance = ERC20(rewardsToken).balanceOf(address(auction));
+        uint256 strategyBalance = ERC20(rewardsToken).balanceOf(
+            address(auction)
+        );
+        console2.log(
+            "Reward token sitting in our strategy",
+            strategyBalance / 1e18,
+            "* 1e18"
+        );
+
+        // if we have reward tokens, sweep it out, and send back our designated profitAmount
+        if (rewardBalance > 0) {
+            console2.log(
+                "Reward token sitting in our auction",
+                rewardBalance / 1e18,
+                "* 1e18"
+            );
+
+            vm.prank(address(auction));
+            ERC20(rewardsToken).transfer(user, rewardBalance);
+            airdrop(asset, address(strategy), _profitAmount);
+            rewardBalance = ERC20(rewardsToken).balanceOf(address(auction));
+        }
+
+        // confirm that we swept everything out
+        assertEq(rewardBalance, 0, "!rewardBalance");
     }
 
     function depositIntoStrategy(

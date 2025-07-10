@@ -20,5 +20,7 @@ interface IStaking {
 
     function withdraw(uint256 _amount) external;
 
+    function setPaused(bool _paused) external;
+
     function getReward() external;
 }
