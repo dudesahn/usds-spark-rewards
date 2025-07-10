@@ -4,8 +4,8 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {SparkCompounder, ERC20} from "../../Strategy.sol";
-import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
+import {SparkCompounder, ERC20} from "src/SparkCompounder.sol";
+import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
