@@ -1,9 +1,9 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {Setup} from "./utils/Setup.sol";
+import {Setup} from "src/test/utils/Setup.sol";
 
-import {SparkCompounderAprOracle} from "src/periphery/StrategyAprOracle.sol";
+import {SparkCompounderAprOracle} from "src/periphery/SparkCompounderAprOracle.sol";
 
 contract OracleTest is Setup {
     SparkCompounderAprOracle public oracle;
