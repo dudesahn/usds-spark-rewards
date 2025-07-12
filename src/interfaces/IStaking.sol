@@ -6,6 +6,8 @@ interface IStaking {
 
     function rewardsToken() external view returns (address);
 
+    function rewardsDistribution() external view returns (address);
+
     function paused() external view returns (bool);
 
     function balanceOf(address) external view returns (uint256);
@@ -16,9 +18,13 @@ interface IStaking {
 
     function rewardRate() external view returns (uint256);
 
+    function periodFinish() external view returns (uint256);
+
     function stake(uint256 _amount, uint16 _referral) external;
 
     function withdraw(uint256 _amount) external;
+
+    function notifyRewardAmount(uint256 _amount) external;
 
     function setPaused(bool _paused) external;
 
