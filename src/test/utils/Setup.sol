@@ -83,6 +83,14 @@ contract Setup is Test, IEvents {
 
         factory = strategy.FACTORY();
 
+        // manually top-up rewards so we don't run into EOW with no rewards
+        uint256 timeLeft = IStaking(staking).periodFinish() - block.timestamp;
+        uint256 week = 86400 * 7;
+        uint256 toSend = IStaking(staking).rewardRate() * (week - timeLeft); // use current rewardRate, scaled by week time elapsed
+        deal(strategy.REWARDS_TOKEN(), staking, toSend * 2); // send double than we're notifying to avoid edge reverts
+        vm.prank(IStaking(staking).rewardsDistribution());
+        IStaking(staking).notifyRewardAmount(toSend);
+
         // label all the used addresses for traces
         vm.label(keeper, "keeper");
         vm.label(factory, "factory");
