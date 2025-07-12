@@ -37,5 +37,5 @@ contract DeployStrategyAndOracle is Script {
     }
 }
 
-// apr oracle deployed at: 0x20bd8551D498641427E2534469Ae2A30304d2b7e
-// strategy deployed at: 0xA0342237a5F99888b92C94F15aa2B330A75D4641
+// apr oracle deployed at: 0xed26eAAEDC6F77DdCfb3BE260ED1C3C257D68402
+// strategy deployed at: 0xc9f01b5c6048B064E6d925d1c2d7206d4fEeF8a3
