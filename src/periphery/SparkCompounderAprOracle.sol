@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
-import {UniswapV3SwapSimulator, ISwapRouter} from "src/libraries/UniswapV3SwapSimulator.sol";
 import {IStaking} from "src/interfaces/IStaking.sol";
+import {IOracle} from "src/interfaces/IOracle.sol";
 
 contract SparkCompounderAprOracle {
     /// @notice Sky Rewards staking contract
@@ -19,9 +19,9 @@ contract SparkCompounderAprOracle {
     /// @notice SPK is paired with USDC in UniV3 pool
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
-    /// @notice Uniswap V3 Router address
-    address public constant UNISWAP_V3_ROUTER =
-        0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    /// @notice SPK Redstone oracle address
+    address public constant REDSTONE_ORACLE =
+        0xF2448DC04B1d3f1767D6f7C03da8a3933bdDD697;
 
     uint256 internal constant SECONDS_PER_YEAR = 31536000;
 
@@ -38,20 +38,15 @@ contract SparkCompounderAprOracle {
         uint256 assets = IStaking(STAKING).totalSupply();
         uint256 rewardRate = IStaking(STAKING).rewardRate(); // tokens per second
 
-        // get price of 1 SPK from UniV3
-        uint256 output = UniswapV3SwapSimulator.simulateExactInputSingle(
-            ISwapRouter(UNISWAP_V3_ROUTER),
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: SPK,
-                tokenOut: USDC,
-                fee: 100,
-                recipient: address(0),
-                deadline: block.timestamp,
-                amountIn: 1e18,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            })
-        );
+        // get price of 1 SPK from Redstone
+        (, int256 answer, , uint256 updatedAt, ) = IOracle(REDSTONE_ORACLE)
+            .latestRoundData();
+
+        // make sure the price is no more than 48 hours old
+        require(block.timestamp - updatedAt < 172800, "stale price");
+        require(answer > 0, "negative price");
+
+        uint256 price = uint256(answer);
 
         // adjust for ∆ assets
         if (_delta < 0) {
@@ -63,6 +58,7 @@ contract SparkCompounderAprOracle {
         // don't divide by 0. if no assets in staking contract, yield would be very good so return 100%
         if (assets == 0) return 1e18;
 
-        oracleApr = (rewardRate * SECONDS_PER_YEAR * output * 1e12) / (assets);
+        // adjust by 1e10 since price is returned with 8 decimals
+        oracleApr = (rewardRate * SECONDS_PER_YEAR * price * 1e10) / (assets);
     }
 }
