@@ -6,6 +6,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {GroveCompounder, ERC20, Auction, IStaking} from "src/GroveCompounder.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
+import {IUniswapV4StateView} from "src/interfaces/IUniswapV4StateView.sol";
 import {AuctionFactory} from "@periphery/Auctions/AuctionFactory.sol";
 import {IUniswapV3Pool} from "@uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 
@@ -21,8 +22,12 @@ interface IFactory {
 }
 
 contract Setup is Test, IEvents {
-    address public constant GROVE_USDC_POOL =
+    address public constant GROVE_USDC_V3_POOL =
         0x5D23797587B2c17414384384098291c0B1Fe1362;
+    IUniswapV4StateView public constant UNISWAP_V4_STATE_VIEW =
+        IUniswapV4StateView(0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227);
+    bytes32 public constant GROVE_USDC_V4_POOL_ID =
+        0x905e07b7a930fc9998b0d695774e3841d37b5ab15b691118071722cc15d89792;
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     uint256 public constant MIN_REWARD_POOL_LIQUIDITY = 1e12;
     uint256 public constant MIN_REWARD_POOL_USDC_BALANCE = 1_000e6;
@@ -163,16 +168,32 @@ contract Setup is Test, IEvents {
         auction.enable(_token);
     }
 
-    function rewardPoolHasUsableLiquidity() public view returns (bool) {
+    function rewardSalePoolHasUsableLiquidity() public view returns (bool) {
         return
-            IUniswapV3Pool(GROVE_USDC_POOL).liquidity() >=
+            IUniswapV3Pool(GROVE_USDC_V3_POOL).liquidity() >=
             MIN_REWARD_POOL_LIQUIDITY &&
-            ERC20(USDC).balanceOf(GROVE_USDC_POOL) >=
+            ERC20(USDC).balanceOf(GROVE_USDC_V3_POOL) >=
             MIN_REWARD_POOL_USDC_BALANCE;
     }
 
+    function rewardV4PoolHasUsableLiquidity() public view returns (bool) {
+        try
+            UNISWAP_V4_STATE_VIEW.getLiquidity(GROVE_USDC_V4_POOL_ID)
+        returns (uint128 liquidity) {
+            return liquidity >= MIN_REWARD_POOL_LIQUIDITY;
+        } catch {
+            return false;
+        }
+    }
+
+    function rewardPricingHasUsableLiquidity() public view returns (bool) {
+        return
+            rewardSalePoolHasUsableLiquidity() ||
+            rewardV4PoolHasUsableLiquidity();
+    }
+
     function defaultToAuctionIfRewardPoolIsThin() internal {
-        if (rewardPoolHasUsableLiquidity()) return;
+        if (rewardSalePoolHasUsableLiquidity()) return;
 
         vm.startPrank(management);
         strategy.setAuction(address(auction));

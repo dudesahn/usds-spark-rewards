@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IStaking} from "src/interfaces/IStaking.sol";
+import {IUniswapV4StateView} from "src/interfaces/IUniswapV4StateView.sol";
 import {IUniswapV3Pool} from "@uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 import {FullMath} from "@uniswap-v3-core/libraries/FullMath.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -23,8 +24,17 @@ contract GroveCompounderAprOracle {
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
     /// @notice GROVE/USDC 1% UniV3 pool
-    IUniswapV3Pool public constant GROVE_USDC_POOL =
+    IUniswapV3Pool public constant GROVE_USDC_V3_POOL =
         IUniswapV3Pool(0x5D23797587B2c17414384384098291c0B1Fe1362);
+
+    /// @notice UniV4 StateView lens
+    IUniswapV4StateView public constant UNISWAP_V4_STATE_VIEW =
+        IUniswapV4StateView(0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227);
+
+    /// @notice UniV4 USDC/GROVE pool key:
+    /// currency0 = USDC, currency1 = GROVE, fee = 70000, tickSpacing = 1400, hooks = address(0)
+    bytes32 public constant GROVE_USDC_V4_POOL_ID =
+        0x905e07b7a930fc9998b0d695774e3841d37b5ab15b691118071722cc15d89792;
 
     uint256 internal constant SECONDS_PER_YEAR = 31536000;
     uint256 internal constant Q192 = 1 << 192;
@@ -65,22 +75,53 @@ contract GroveCompounderAprOracle {
     }
 
     function _grovePrice() internal view returns (uint256) {
-        require(
-            GROVE_USDC_POOL.liquidity() >= MIN_REWARD_POOL_LIQUIDITY &&
-                IERC20(USDC).balanceOf(address(GROVE_USDC_POOL)) >=
-                MIN_REWARD_POOL_USDC_BALANCE,
-            "insufficient pool liquidity"
-        );
+        if (_v3PoolHasUsableLiquidity()) {
+            return _v3GrovePrice();
+        }
 
-        (uint160 sqrtPriceX96, , , , , , ) = GROVE_USDC_POOL.slot0();
-        address token0 = GROVE_USDC_POOL.token0();
-        address token1 = GROVE_USDC_POOL.token1();
+        if (_v4PoolHasUsableLiquidity()) {
+            return _v4GrovePrice();
+        }
+
+        revert("insufficient pool liquidity");
+    }
+
+    function _v3PoolHasUsableLiquidity() internal view returns (bool) {
+        return
+            GROVE_USDC_V3_POOL.liquidity() >= MIN_REWARD_POOL_LIQUIDITY &&
+            IERC20(USDC).balanceOf(address(GROVE_USDC_V3_POOL)) >=
+            MIN_REWARD_POOL_USDC_BALANCE;
+    }
+
+    function _v4PoolHasUsableLiquidity() internal view returns (bool) {
+        try
+            UNISWAP_V4_STATE_VIEW.getLiquidity(GROVE_USDC_V4_POOL_ID)
+        returns (uint128 liquidity) {
+            return liquidity >= MIN_REWARD_POOL_LIQUIDITY;
+        } catch {
+            return false;
+        }
+    }
+
+    function _v3GrovePrice() internal view returns (uint256) {
+        (uint160 sqrtPriceX96, , , , , , ) = GROVE_USDC_V3_POOL.slot0();
+        address token0 = GROVE_USDC_V3_POOL.token0();
+        address token1 = GROVE_USDC_V3_POOL.token1();
 
         if (token0 == GROVE && token1 == USDC) {
             return _quoteToken1ForToken0(sqrtPriceX96, 1e18) * 1e12;
         }
 
         require(token0 == USDC && token1 == GROVE, "pool tokens");
+        return _quoteToken0ForToken1(sqrtPriceX96, 1e18) * 1e12;
+    }
+
+    function _v4GrovePrice() internal view returns (uint256) {
+        (uint160 sqrtPriceX96, , , ) = UNISWAP_V4_STATE_VIEW.getSlot0(
+            GROVE_USDC_V4_POOL_ID
+        );
+
+        // UniV4 pool key is USDC/GROVE, so quote token0 USDC for 1e18 token1 GROVE.
         return _quoteToken0ForToken1(sqrtPriceX96, 1e18) * 1e12;
     }
 

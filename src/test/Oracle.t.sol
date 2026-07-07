@@ -16,7 +16,7 @@ contract OracleTest is Setup {
     }
 
     function testSimpleOracleCheck() public {
-        if (!rewardPoolHasUsableLiquidity()) {
+        if (!rewardPricingHasUsableLiquidity()) {
             vm.expectRevert("insufficient pool liquidity");
             oracle.aprAfterDebtChange(address(strategy), 0);
             return;
@@ -24,6 +24,24 @@ contract OracleTest is Setup {
 
         uint256 currentApr = oracle.aprAfterDebtChange(address(strategy), 0);
         console2.log("currentAPR:", currentApr);
+    }
+
+    function test_oracleCanUseV4Backup() public {
+        vm.mockCall(
+            GROVE_USDC_V3_POOL,
+            abi.encodeWithSelector(bytes4(keccak256("liquidity()"))),
+            abi.encode(uint128(0))
+        );
+
+        if (!rewardV4PoolHasUsableLiquidity()) {
+            vm.expectRevert("insufficient pool liquidity");
+            oracle.aprAfterDebtChange(address(strategy), 0);
+            return;
+        }
+
+        uint256 currentApr = oracle.aprAfterDebtChange(address(strategy), 0);
+        assertGt(currentApr, 0, "ZERO");
+        assertLt(currentApr, 1e18, "+100%");
     }
 
     function checkOracle(address _strategy, uint256 _delta) public {
@@ -59,7 +77,7 @@ contract OracleTest is Setup {
     }
 
     function test_oracle(uint256 _amount, uint16 _percentChange) public {
-        if (!rewardPoolHasUsableLiquidity()) {
+        if (!rewardPricingHasUsableLiquidity()) {
             vm.expectRevert("insufficient pool liquidity");
             oracle.aprAfterDebtChange(address(strategy), 0);
             return;

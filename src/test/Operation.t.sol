@@ -29,7 +29,7 @@ contract OperationTest is Setup {
     }
 
     function test_rewardSaleModeMatchesPoolLiquidity() public {
-        if (rewardPoolHasUsableLiquidity()) {
+        if (rewardSalePoolHasUsableLiquidity()) {
             assertTrue(!strategy.useAuction());
             assertEq(strategy.auction(), address(0));
         } else {
