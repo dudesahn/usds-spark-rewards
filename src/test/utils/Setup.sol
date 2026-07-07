@@ -105,10 +105,14 @@ contract Setup is Test, IEvents {
             ? periodFinish - block.timestamp
             : 0;
         uint256 week = 86400 * 7;
-        uint256 toSend = IStaking(staking).rewardRate() * (week - timeLeft); // use current rewardRate, scaled by week time elapsed
-        airdrop(ERC20(strategy.REWARDS_TOKEN()), staking, toSend * 2); // add rewards without clobbering already-funded emissions
-        vm.prank(IStaking(staking).rewardsDistribution());
-        IStaking(staking).notifyRewardAmount(toSend);
+        uint256 toSend = timeLeft < week
+            ? IStaking(staking).rewardRate() * (week - timeLeft)
+            : 0; // use current rewardRate, scaled by week time elapsed
+        if (toSend > 0) {
+            airdrop(ERC20(strategy.REWARDS_TOKEN()), staking, toSend * 2); // add rewards without clobbering already-funded emissions
+            vm.prank(IStaking(staking).rewardsDistribution());
+            IStaking(staking).notifyRewardAmount(toSend);
+        }
 
         // label all the used addresses for traces
         vm.label(keeper, "keeper");

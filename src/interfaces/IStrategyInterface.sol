@@ -26,7 +26,7 @@ interface IStrategyInterface is IBaseHealthCheck {
 
     function kickAuction(address _token) external;
 
-    function minAmountToSell() external view returns (uint256);
+    function minAmountToSell(address _token) external view returns (uint256);
 
     function openDeposits() external view returns (bool);
 

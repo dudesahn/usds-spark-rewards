@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {BaseHealthCheck, ERC20} from "@periphery/Bases/HealthCheck/BaseHealthCheck.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {TokenizedStrategyLib as TokenizedStrategy} from "@tokenized-strategy/libraries/TokenizedStrategyLib.sol";
 import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
 import {Auction} from "@periphery/Auctions/Auction.sol";
 import {IStaking} from "src/interfaces/IStaking.sol";
@@ -19,12 +20,6 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
 
     /// @notice True if we should use auctions, if false use UniV3
     bool public useAuction;
-
-    /// @notice True if strategy deposits are open to any address
-    bool public openDeposits;
-
-    /// @notice Mapping of addresses and whether they are allowed to deposit to this strategy
-    mapping(address => bool) public allowed;
 
     /// @notice Reward token we get for staking
     address public immutable REWARDS_TOKEN;
@@ -54,7 +49,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
 
         // Set the min amount for the swapper/auction to sell
         base = usdc; // use USDC as base in UniV3
-        minAmountToSell = 5_000e18;
+        _setMinAmountToSell(REWARDS_TOKEN, 5_000e18);
         _setUniFees(REWARDS_TOKEN, usdc, 10_000); // GROVE-USDC pool is 1%. uniV3 fees in 1/100 of bps
     }
 
@@ -74,6 +69,10 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
 
     function claimableRewards() external view returns (uint256) {
         return STAKING.earned(address(this));
+    }
+
+    function openDeposits() external view returns (bool) {
+        return open;
     }
 
     /* ========== CORE STRATEGY FUNCTIONS ========== */
@@ -96,9 +95,10 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
 
         // store in memory to save gas
         uint256 toSwap = balanceOfRewards();
+        uint256 minRewardAmountToSell = minAmountToSell[REWARDS_TOKEN];
 
         if (!useAuction) {
-            if (toSwap > minAmountToSell) {
+            if (toSwap > minRewardAmountToSell) {
                 require(PSM_WRAPPER.tin() == 0, "!psmFee");
                 // swap if using UniV3 to sell rewards
                 _swapFrom(REWARDS_TOKEN, base, toSwap, 0);
@@ -108,7 +108,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
                     ERC20(base).balanceOf(address(this))
                 );
             }
-        } else if (toSwap > minAmountToSell) {
+        } else if (toSwap > minRewardAmountToSell) {
             _kickAuction(REWARDS_TOKEN, toSwap);
         }
 
@@ -131,11 +131,9 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
     ) public view override returns (uint256) {
         if (STAKING.paused()) {
             return 0;
-        } else if (openDeposits || allowed[_receiver]) {
-            return type(uint256).max;
-        } else {
-            return 0;
         }
+
+        return super.availableDepositLimit(_receiver);
     }
 
     function _min(uint256 a, uint256 b) internal pure returns (uint256) {
@@ -172,7 +170,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
             rewardsBalance = ERC20(_token).balanceOf(address(this));
         }
 
-        if (rewardsBalance > minAmountToSell) {
+        if (rewardsBalance > minAmountToSell[REWARDS_TOKEN]) {
             _kickAuction(_token, rewardsBalance);
         }
     }
@@ -193,7 +191,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
     function setMinAmountToSell(
         uint256 _minAmountToSell
     ) external onlyManagement {
-        minAmountToSell = _minAmountToSell;
+        _setMinAmountToSell(REWARDS_TOKEN, _minAmountToSell);
     }
 
     /**
@@ -243,19 +241,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
      * @param _openDeposits Allow deposits from anyone (true) or use mapping (false).
      */
     function setOpenDeposits(bool _openDeposits) external onlyManagement {
-        openDeposits = _openDeposits;
-    }
-
-    /**
-     * @notice Set whether an address can deposit to the strategy or not.
-     * @dev Can only be called by management.
-     * @param _depositor Address to set mapping for.
-     * @param _allowed Whether the address is allowed to deposit to the strategy.
-     */
-    function setAllowed(
-        address _depositor,
-        bool _allowed
-    ) external onlyManagement {
-        allowed[_depositor] = _allowed;
+        open = _openDeposits;
+        emit OpenSet(_openDeposits);
     }
 }
