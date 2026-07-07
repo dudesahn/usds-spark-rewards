@@ -15,7 +15,7 @@ import "forge-std/Script.sol";
 // verify:
 // needed to manually verify, can copy-paste abi-encoded constructor args from the printed output of the deployment. this command ends with the address and contract to verify, always
 // no constructor (or thus, constructor args) on this one
-// forge verify-contract --rpc-url $ETH_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "CONTRACT_ADDRESS" CONTRACT_NAME
+// forge verify-contract --rpc-url $ETH_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "0x1a5579C4fBcC89Cc8ae46D551C53d7cecc9bD046" SparkCompounderAprOracle
 
 contract DeployStrategyAndOracle is Script {
     function run() external {
@@ -27,10 +27,10 @@ contract DeployStrategyAndOracle is Script {
         console2.log("apr oracle deployed at: %s", address(aprOracle));
         console2.log("-----------------------------");
 
-        SparkCompounder strategy = new SparkCompounder();
+        //SparkCompounder strategy = new SparkCompounder();
 
         console2.log("-----------------------------");
-        console2.log("strategy deployed at: %s", address(strategy));
+        //console2.log("strategy deployed at: %s", address(strategy));
         console2.log("-----------------------------");
 
         vm.stopBroadcast();
@@ -39,3 +39,4 @@ contract DeployStrategyAndOracle is Script {
 
 // apr oracle deployed at: 0xed26eAAEDC6F77DdCfb3BE260ED1C3C257D68402
 // strategy deployed at: 0xc9f01b5c6048B064E6d925d1c2d7206d4fEeF8a3
+// apr oracle v2 deployed at: 0x1a5579C4fBcC89Cc8ae46D551C53d7cecc9bD046
