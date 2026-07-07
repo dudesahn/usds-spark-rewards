@@ -4,6 +4,8 @@ pragma solidity 0.8.28;
 interface IPsmWrapper {
     function sellGem(address, uint256) external returns (uint256);
 
+    function tin() external view returns (uint256);
+
     function usds() external view returns (address);
 
     function gem() external view returns (address);

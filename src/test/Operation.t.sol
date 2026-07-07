@@ -5,6 +5,9 @@ import "forge-std/console2.sol";
 import {Setup, ERC20, IStrategyInterface} from "src/test/utils/Setup.sol";
 
 contract OperationTest is Setup {
+    address internal constant PSM_WRAPPER =
+        0xA188EEC8F81263234dA3622A406892F3D630f98c;
+
     function setUp() public virtual override {
         super.setUp();
     }
@@ -36,6 +39,51 @@ contract OperationTest is Setup {
             assertTrue(strategy.useAuction());
             assertEq(strategy.auction(), address(auction));
         }
+    }
+
+    function test_swapPathRequiresZeroPsmFee() public {
+        uint256 _amount = 10_000e18;
+
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+        skip(strategy.profitMaxUnlockTime());
+
+        vm.prank(management);
+        strategy.setUseAuction(false);
+
+        vm.mockCall(
+            PSM_WRAPPER,
+            abi.encodeWithSelector(bytes4(keccak256("tin()"))),
+            abi.encode(uint256(1))
+        );
+
+        vm.prank(keeper);
+        vm.expectRevert("!psmFee");
+        strategy.report();
+    }
+
+    function test_auctionPathIgnoresPsmFee() public {
+        uint256 _amount = 10_000e18;
+
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+        skip(strategy.profitMaxUnlockTime());
+
+        enableAuction();
+
+        vm.mockCall(
+            PSM_WRAPPER,
+            abi.encodeWithSelector(bytes4(keccak256("tin()"))),
+            abi.encode(uint256(1))
+        );
+
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+        assertEq(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
+
+        uint256 rewardBalance = ERC20(strategy.REWARDS_TOKEN()).balanceOf(
+            address(auction)
+        );
+        assertGt(rewardBalance, 0, "!auction");
     }
 
     // test a fixed deposit amount so we can see our logs through the active reward sale mode

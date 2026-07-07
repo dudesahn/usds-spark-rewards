@@ -99,9 +99,10 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
 
         if (!useAuction) {
             if (toSwap > minAmountToSell) {
+                require(PSM_WRAPPER.tin() == 0, "!psmFee");
                 // swap if using UniV3 to sell rewards
                 _swapFrom(REWARDS_TOKEN, base, toSwap, 0);
-                // use PSM to go from USDC to USDS for free, assuming psm.tin() stays zero
+                // use PSM to go from USDC to USDS for free
                 PSM_WRAPPER.sellGem(
                     address(this),
                     ERC20(base).balanceOf(address(this))
