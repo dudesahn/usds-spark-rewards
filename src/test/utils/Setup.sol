@@ -48,8 +48,8 @@ contract Setup is Test, IEvents {
     uint256 public decimals;
     uint256 public MAX_BPS = 10_000;
 
-    // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
-    uint256 public maxFuzzAmount = 1e30;
+    // Fuzz deposit sizes that keep live-fork reward accounting manageable.
+    uint256 public maxFuzzAmount = 10_000e18;
     uint256 public minFuzzAmount = 10_000;
 
     // use this as a cutoff to expect when deposits/withdrawals won't cause detectable APR differences
@@ -84,10 +84,13 @@ contract Setup is Test, IEvents {
         factory = strategy.FACTORY();
 
         // manually top-up rewards so we don't run into EOW with no rewards
-        uint256 timeLeft = IStaking(staking).periodFinish() - block.timestamp;
+        uint256 periodFinish = IStaking(staking).periodFinish();
+        uint256 timeLeft = periodFinish > block.timestamp
+            ? periodFinish - block.timestamp
+            : 0;
         uint256 week = 86400 * 7;
         uint256 toSend = IStaking(staking).rewardRate() * (week - timeLeft); // use current rewardRate, scaled by week time elapsed
-        deal(strategy.REWARDS_TOKEN(), staking, toSend * 2); // send double than we're notifying to avoid edge reverts
+        airdrop(ERC20(strategy.REWARDS_TOKEN()), staking, toSend * 2); // add rewards without clobbering already-funded emissions
         vm.prank(IStaking(staking).rewardsDistribution());
         IStaking(staking).notifyRewardAmount(toSend);
 

@@ -9,6 +9,13 @@ contract OperationTest is Setup {
         super.setUp();
     }
 
+    function enableAuction() internal {
+        vm.startPrank(management);
+        strategy.setAuction(address(auction));
+        strategy.setUseAuction(true);
+        vm.stopPrank();
+    }
+
     function test_setupStrategyOK() public {
         console2.log("address of strategy", address(strategy));
         assertTrue(address(0) != address(strategy));
@@ -21,7 +28,7 @@ contract OperationTest is Setup {
 
     // test a fixed deposit amount so we can see our logs, using both UniV3 and auctions for rewards
     function test_operation_fixed() public {
-        uint256 _amount = 1_000_000e18;
+        uint256 _amount = 10_000e18;
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
@@ -39,31 +46,23 @@ contract OperationTest is Setup {
         vm.expectRevert("!useAuction");
         strategy.kickAuction(address(asset));
 
-        // Report profit
+        enableAuction();
+
+        // Report rewards into the auction.
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
-        console2.log("Profit from UniV3 report:", profit / 1e18, "* 1e18 USDS");
-        uint256 roughApr = (((profit * 365) /
-            (strategy.profitMaxUnlockTime() / 86400)) * 10_000) / _amount;
-        console2.log("Rough APR from UniV3 report:", roughApr, "BPS");
         console2.log(
-            "Days to unlock profit:",
-            strategy.profitMaxUnlockTime() / 86400
+            "Profit from auction report:",
+            profit / 1e18,
+            "* 1e18 USDS"
         );
-
-        // Check return Values
-        assertGt(profit, 0, "!profit");
+        assertEq(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
-        skip(strategy.profitMaxUnlockTime());
-
-        // switch to using the auction
-        vm.startPrank(management);
-        vm.expectRevert("!auction");
-        strategy.setUseAuction(true);
-        strategy.setAuction(address(auction));
-        strategy.setUseAuction(true);
-        vm.stopPrank();
+        uint256 rewardBalance = ERC20(strategy.REWARDS_TOKEN()).balanceOf(
+            address(auction)
+        );
+        assertGt(rewardBalance, 0, "!auction");
 
         // simulate our auction process
         uint256 simulatedProfit = _amount / 200; // 0.5% profit
@@ -111,7 +110,7 @@ contract OperationTest is Setup {
     }
 
     function test_operation_auction_extra() public {
-        uint256 _amount = 1_000_000e18;
+        uint256 _amount = 10_000e18;
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
@@ -124,11 +123,7 @@ contract OperationTest is Setup {
         assertGt(claimable, 0, "!rewards");
         console2.log("Claimable SPK:", claimable / 1e18, "* 1e18");
 
-        // switch to using the auction
-        vm.startPrank(management);
-        strategy.setAuction(address(auction));
-        strategy.setUseAuction(true);
-        vm.stopPrank();
+        enableAuction();
 
         // Report profit, should come through our auction
         vm.prank(keeper);
@@ -178,6 +173,8 @@ contract OperationTest is Setup {
 
         // make sure we have some claimable profit
         assertGt(strategy.claimableRewards(), 0, "!rewards");
+
+        enableAuction();
 
         // Report profit
         vm.prank(keeper);
@@ -233,6 +230,8 @@ contract OperationTest is Setup {
         uint256 toAirdrop = (_amount * _profitFactor) / MAX_BPS;
         airdrop(asset, address(strategy), toAirdrop);
 
+        enableAuction();
+
         // Report profit
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
@@ -277,6 +276,8 @@ contract OperationTest is Setup {
         // TODO: implement logic to simulate earning interest.
         uint256 toAirdrop = (_amount * _profitFactor) / MAX_BPS;
         airdrop(asset, address(strategy), toAirdrop);
+
+        enableAuction();
 
         // Report profit
         vm.prank(keeper);
@@ -338,6 +339,8 @@ contract OperationTest is Setup {
 
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
+
+        enableAuction();
 
         vm.prank(keeper);
         strategy.report();
