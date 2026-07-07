@@ -38,6 +38,10 @@ contract SparkCompounderAprOracle {
         uint256 assets = IStaking(STAKING).totalSupply();
         uint256 rewardRate = IStaking(STAKING).rewardRate(); // tokens per second
 
+        if (block.timestamp > IStaking(STAKING).periodFinish()) {
+            return 0;
+        }
+
         // get price of 1 SPK from Redstone
         (, int256 answer, , uint256 updatedAt, ) = IOracle(REDSTONE_ORACLE)
             .latestRoundData();
