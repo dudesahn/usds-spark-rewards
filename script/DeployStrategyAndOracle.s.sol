@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
-import {SparkCompounderAprOracle} from "src/periphery/SparkCompounderAprOracle.sol";
-import {SparkCompounder} from "src/SparkCompounder.sol";
+import {GroveCompounderAprOracle} from "src/periphery/GroveCompounderAprOracle.sol";
+import {GroveCompounder} from "src/GroveCompounder.sol";
 
 import "forge-std/Script.sol";
 
@@ -15,19 +15,19 @@ import "forge-std/Script.sol";
 // verify:
 // needed to manually verify, can copy-paste abi-encoded constructor args from the printed output of the deployment. this command ends with the address and contract to verify, always
 // no constructor (or thus, constructor args) on this one
-// forge verify-contract --rpc-url $ETH_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "0x1a5579C4fBcC89Cc8ae46D551C53d7cecc9bD046" SparkCompounderAprOracle
+// forge verify-contract --rpc-url $ETH_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "0x1a5579C4fBcC89Cc8ae46D551C53d7cecc9bD046" GroveCompounderAprOracle
 
 contract DeployStrategyAndOracle is Script {
     function run() external {
         vm.startBroadcast();
 
-        SparkCompounderAprOracle aprOracle = new SparkCompounderAprOracle();
+        GroveCompounderAprOracle aprOracle = new GroveCompounderAprOracle();
 
         console2.log("-----------------------------");
         console2.log("apr oracle deployed at: %s", address(aprOracle));
         console2.log("-----------------------------");
 
-        //SparkCompounder strategy = new SparkCompounder();
+        //GroveCompounder strategy = new GroveCompounder();
 
         console2.log("-----------------------------");
         //console2.log("strategy deployed at: %s", address(strategy));

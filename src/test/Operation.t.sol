@@ -10,6 +10,8 @@ contract OperationTest is Setup {
     }
 
     function enableAuction() internal {
+        if (strategy.useAuction()) return;
+
         vm.startPrank(management);
         strategy.setAuction(address(auction));
         strategy.setUseAuction(true);
@@ -26,7 +28,17 @@ contract OperationTest is Setup {
         // TODO: add additional check on strat params
     }
 
-    // test a fixed deposit amount so we can see our logs, using both UniV3 and auctions for rewards
+    function test_rewardSaleModeMatchesPoolLiquidity() public {
+        if (rewardPoolHasUsableLiquidity()) {
+            assertTrue(!strategy.useAuction());
+            assertEq(strategy.auction(), address(0));
+        } else {
+            assertTrue(strategy.useAuction());
+            assertEq(strategy.auction(), address(auction));
+        }
+    }
+
+    // test a fixed deposit amount so we can see our logs through the active reward sale mode
     function test_operation_fixed() public {
         uint256 _amount = 10_000e18;
 
@@ -39,12 +51,14 @@ contract OperationTest is Setup {
 
         uint256 claimable = strategy.claimableRewards();
         assertGt(claimable, 0, "!rewards");
-        console2.log("Claimable SPK:", claimable / 1e18, "* 1e18");
+        console2.log("Claimable rewards:", claimable / 1e18, "* 1e18");
 
-        // can't kick auction if useAuction is false
-        vm.prank(management);
-        vm.expectRevert("!useAuction");
-        strategy.kickAuction(address(asset));
+        if (!defaultedToAuction) {
+            // can't kick auction if useAuction is false
+            vm.prank(management);
+            vm.expectRevert("!useAuction");
+            strategy.kickAuction(address(asset));
+        }
 
         enableAuction();
 
@@ -121,7 +135,7 @@ contract OperationTest is Setup {
 
         uint256 claimable = strategy.claimableRewards();
         assertGt(claimable, 0, "!rewards");
-        console2.log("Claimable SPK:", claimable / 1e18, "* 1e18");
+        console2.log("Claimable rewards:", claimable / 1e18, "* 1e18");
 
         enableAuction();
 

@@ -3,19 +3,25 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Setup} from "src/test/utils/Setup.sol";
 
-import {SparkCompounderAprOracle} from "src/periphery/SparkCompounderAprOracle.sol";
+import {GroveCompounderAprOracle} from "src/periphery/GroveCompounderAprOracle.sol";
 
 contract OracleTest is Setup {
-    SparkCompounderAprOracle public oracle;
+    GroveCompounderAprOracle public oracle;
 
     uint256 public fuzzAmount;
 
     function setUp() public override {
         super.setUp();
-        oracle = new SparkCompounderAprOracle();
+        oracle = new GroveCompounderAprOracle();
     }
 
     function testSimpleOracleCheck() public {
+        if (!rewardPoolHasUsableLiquidity()) {
+            vm.expectRevert("insufficient pool liquidity");
+            oracle.aprAfterDebtChange(address(strategy), 0);
+            return;
+        }
+
         uint256 currentApr = oracle.aprAfterDebtChange(address(strategy), 0);
         console2.log("currentAPR:", currentApr);
     }
@@ -53,6 +59,12 @@ contract OracleTest is Setup {
     }
 
     function test_oracle(uint256 _amount, uint16 _percentChange) public {
+        if (!rewardPoolHasUsableLiquidity()) {
+            vm.expectRevert("insufficient pool liquidity");
+            oracle.aprAfterDebtChange(address(strategy), 0);
+            return;
+        }
+
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
         _percentChange = uint16(bound(uint256(_percentChange), 10, MAX_BPS));
         fuzzAmount = _amount;

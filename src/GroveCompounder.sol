@@ -8,7 +8,7 @@ import {Auction} from "@periphery/Auctions/Auction.sol";
 import {IStaking} from "src/interfaces/IStaking.sol";
 import {IPsmWrapper} from "src/interfaces/IPsmWrapper.sol";
 
-contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
+contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
     using SafeERC20 for ERC20;
 
     /// @notice yearn's referral code
@@ -31,7 +31,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
 
     /// @notice Staking contract we use
     IStaking public constant STAKING =
-        IStaking(0x173e314C7635B45322cd8Cb14f44b312e079F3af);
+        IStaking(0x4E41488C19cD35EB4de3083Fc3e204854c75c86a);
 
     /// @notice Wrapper for PSM with USDS
     IPsmWrapper internal constant PSM_WRAPPER =
@@ -40,7 +40,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     /// @notice Don't bother spending the gas to stake dust
     uint256 internal constant DUST = 1e18;
 
-    constructor() BaseHealthCheck(PSM_WRAPPER.usds(), "Spark USDS Compounder") {
+    constructor() BaseHealthCheck(PSM_WRAPPER.usds(), "Grove USDS Compounder") {
         require(!STAKING.paused(), "!paused");
         require(PSM_WRAPPER.usds() == STAKING.stakingToken(), "!stakingToken");
         REWARDS_TOKEN = STAKING.rewardsToken();
@@ -54,8 +54,8 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
 
         // Set the min amount for the swapper/auction to sell
         base = usdc; // use USDC as base in UniV3
-        minAmountToSell = 5_000e18; // SPK is ~$0.03
-        _setUniFees(REWARDS_TOKEN, usdc, 100); // SPK-USDC pool is 0.01%. uniV3 fees in 1/100 of bps
+        minAmountToSell = 5_000e18;
+        _setUniFees(REWARDS_TOKEN, usdc, 10_000); // GROVE-USDC pool is 1%. uniV3 fees in 1/100 of bps
     }
 
     /* ========== VIEW FUNCTIONS ========== */
@@ -198,7 +198,7 @@ contract SparkCompounder is UniswapV3Swapper, BaseHealthCheck {
     /**
      * @notice Set fees for UniswapV3 to sell rewardsToken.
      * @dev Can only be called by management.
-     * @param _rewardToBase fee reward to base (spk/usdc)
+     * @param _rewardToBase fee reward to base (grove/usdc)
      */
     function setUniV3Fees(uint24 _rewardToBase) external onlyManagement {
         _setUniFees(REWARDS_TOKEN, base, _rewardToBase);

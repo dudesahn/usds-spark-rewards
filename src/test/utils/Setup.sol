@@ -4,9 +4,10 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {SparkCompounder, ERC20, Auction, IStaking} from "src/SparkCompounder.sol";
+import {GroveCompounder, ERC20, Auction, IStaking} from "src/GroveCompounder.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 import {AuctionFactory} from "@periphery/Auctions/AuctionFactory.sol";
+import {IUniswapV3Pool} from "@uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -20,6 +21,12 @@ interface IFactory {
 }
 
 contract Setup is Test, IEvents {
+    address public constant GROVE_USDC_POOL =
+        0x5D23797587B2c17414384384098291c0B1Fe1362;
+    address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    uint256 public constant MIN_REWARD_POOL_LIQUIDITY = 1e12;
+    uint256 public constant MIN_REWARD_POOL_USDC_BALANCE = 1_000e6;
+
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
     IStrategyInterface public strategy;
@@ -43,6 +50,8 @@ contract Setup is Test, IEvents {
 
     // Address of the real deployed Factory
     address public factory;
+
+    bool public defaultedToAuction;
 
     // Integer variables that will be used repeatedly.
     uint256 public decimals;
@@ -69,7 +78,7 @@ contract Setup is Test, IEvents {
 
         // Set decimals
         decimals = asset.decimals();
-        staking = 0x173e314C7635B45322cd8Cb14f44b312e079F3af;
+        staking = 0x4E41488C19cD35EB4de3083Fc3e204854c75c86a;
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
@@ -80,6 +89,8 @@ contract Setup is Test, IEvents {
         // set min amount to sell super low for testing ~($1.50)
         vm.prank(management);
         strategy.setMinAmountToSell(50e18);
+
+        defaultToAuctionIfRewardPoolIsThin();
 
         factory = strategy.FACTORY();
 
@@ -107,7 +118,7 @@ contract Setup is Test, IEvents {
         // we save the strategy as a IStrategyInterface to give it the needed interface
         vm.startPrank(management);
         IStrategyInterface _strategy = IStrategyInterface(
-            address(new SparkCompounder())
+            address(new GroveCompounder())
         );
 
         // setup the strategy
@@ -150,6 +161,25 @@ contract Setup is Test, IEvents {
         // enable reward token on our auction
         vm.prank(management);
         auction.enable(_token);
+    }
+
+    function rewardPoolHasUsableLiquidity() public view returns (bool) {
+        return
+            IUniswapV3Pool(GROVE_USDC_POOL).liquidity() >=
+            MIN_REWARD_POOL_LIQUIDITY &&
+            ERC20(USDC).balanceOf(GROVE_USDC_POOL) >=
+            MIN_REWARD_POOL_USDC_BALANCE;
+    }
+
+    function defaultToAuctionIfRewardPoolIsThin() internal {
+        if (rewardPoolHasUsableLiquidity()) return;
+
+        vm.startPrank(management);
+        strategy.setAuction(address(auction));
+        strategy.setUseAuction(true);
+        vm.stopPrank();
+
+        defaultedToAuction = true;
     }
 
     function simulateAuction(uint256 _profitAmount) public {
