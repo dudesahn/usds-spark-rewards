@@ -28,6 +28,7 @@ contract OperationTest is Setup {
         assertEq(strategy.management(), management);
         assertEq(strategy.performanceFeeRecipient(), performanceFeeRecipient);
         assertEq(strategy.keeper(), keeper);
+        assertEq(strategy.referral(), 2009);
         // TODO: add additional check on strat params
     }
 

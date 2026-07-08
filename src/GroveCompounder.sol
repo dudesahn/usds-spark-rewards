@@ -13,7 +13,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
     using SafeERC20 for ERC20;
 
     /// @notice yearn's referral code
-    uint16 public referral = 1007;
+    uint16 public referral = 2009;
 
     /// @notice Address of the specific Auction this strategy uses.
     address public auction;
