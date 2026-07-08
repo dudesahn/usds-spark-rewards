@@ -28,15 +28,11 @@ interface IStrategyInterface is IBaseHealthCheck {
 
     function minAmountToSell(address _token) external view returns (uint256);
 
-    function openDeposits() external view returns (bool);
-
     function allowed(address _depositor) external view returns (bool);
 
     function setMinAmountToSell(uint256 _minAmountToSell) external;
 
     function setUniV3Fees(uint24 _rewardToBase) external;
-
-    function setOpenDeposits(bool _openDeposits) external;
 
     function setAllowed(address _depositor, bool _allowed) external;
 

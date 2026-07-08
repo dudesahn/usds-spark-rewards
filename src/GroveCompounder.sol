@@ -71,10 +71,6 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
         return STAKING.earned(address(this));
     }
 
-    function openDeposits() external view returns (bool) {
-        return open;
-    }
-
     /* ========== CORE STRATEGY FUNCTIONS ========== */
 
     function _deployFunds(uint256 _amount) internal override {
@@ -237,15 +233,5 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
      */
     function setReferral(uint16 _referral) external onlyManagement {
         referral = _referral;
-    }
-
-    /**
-     * @notice Set whether deposits are open to anyone or restricted to our allowed mapping.
-     * @dev Can only be called by management.
-     * @param _openDeposits Allow deposits from anyone (true) or use mapping (false).
-     */
-    function setOpenDeposits(bool _openDeposits) external onlyManagement {
-        open = _openDeposits;
-        emit OpenSet(_openDeposits);
     }
 }

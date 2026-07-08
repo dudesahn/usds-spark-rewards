@@ -149,7 +149,7 @@ contract Setup is Test, IEvents {
 
         // turn on open deposits
         vm.prank(management);
-        _strategy.setOpenDeposits(true);
+        _strategy.setOpen(true);
 
         return address(_strategy);
     }
