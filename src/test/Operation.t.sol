@@ -32,14 +32,9 @@ contract OperationTest is Setup {
         // TODO: add additional check on strat params
     }
 
-    function test_rewardSaleModeMatchesPoolLiquidity() public {
-        if (rewardSalePoolHasUsableLiquidity()) {
-            assertTrue(!strategy.useAuction());
-            assertEq(strategy.auction(), address(0));
-        } else {
-            assertTrue(strategy.useAuction());
-            assertEq(strategy.auction(), address(auction));
-        }
+    function test_rewardSaleModeDefaultsToAuction() public {
+        assertTrue(strategy.useAuction());
+        assertEq(strategy.auction(), address(auction));
     }
 
     function test_swapPathRequiresZeroPsmFee() public {

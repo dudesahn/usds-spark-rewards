@@ -19,7 +19,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
     address public auction;
 
     /// @notice True if we should use auctions, if false use UniV3
-    bool public useAuction;
+    bool public useAuction = true;
 
     /// @notice Reward token we get for staking
     address public immutable REWARDS_TOKEN;
@@ -177,8 +177,10 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
 
     function _kickAuction(address _token, uint256 _balance) internal {
         require(_token != address(asset), "!asset");
-        ERC20(_token).safeTransfer(auction, _balance);
-        Auction(auction).kick(_token);
+        address _auction = auction;
+        require(_auction != address(0), "!auction");
+        ERC20(_token).safeTransfer(_auction, _balance);
+        Auction(_auction).kick(_token);
     }
 
     /* ========== PERMISSIONED SETTER FUNCTIONS ========== */
@@ -212,6 +214,8 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
         if (_auction != address(0)) {
             require(Auction(_auction).receiver() == address(this), "receiver");
             require(Auction(_auction).want() == address(asset), "want");
+        } else {
+            require(!useAuction, "!auction");
         }
         auction = _auction;
     }

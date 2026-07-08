@@ -22,12 +22,16 @@ interface IFactory {
 }
 
 contract Setup is Test, IEvents {
-    address public constant GROVE_USDC_V3_POOL =
-        0x5D23797587B2c17414384384098291c0B1Fe1362;
+    address public constant GROVE_USDC_V3_POOL = 0x5D23797587B2c17414384384098291c0B1Fe1362;
     IUniswapV4StateView public constant UNISWAP_V4_STATE_VIEW =
         IUniswapV4StateView(0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227);
-    bytes32 public constant GROVE_USDC_V4_POOL_ID =
-        0x905e07b7a930fc9998b0d695774e3841d37b5ab15b691118071722cc15d89792;
+    bytes32 public constant GROVE_USDC_V4_POOL_ID = 0x2897b6ccd757711791a90b723df4f89567568859d040ff97d25cc4a5cb93ea03;
+    bytes32 public constant GROVE_USDC_V4_POOL_ID_TWO =
+        0x9fe7fb249f5fdacc3c102cb8f9c5e5b59b70da2ea96377804bcb58328b93441f;
+    bytes32 public constant GROVE_USDC_V4_POOL_ID_THREE =
+        0xb557b2447a4723741959fe7ebd5a37375023931d19f6383cc83bd0d9c8397bb9;
+    bytes32 public constant GROVE_USDC_V4_POOL_ID_FOUR =
+        0x2e53ef1a957f41bfba562bac317881d6f0ef2d6c217c7279c11b0878f9791ad5;
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     uint256 public constant MIN_REWARD_POOL_LIQUIDITY = 1e12;
     uint256 public constant MIN_REWARD_POOL_USDC_BALANCE = 1_000e6;
@@ -38,8 +42,7 @@ contract Setup is Test, IEvents {
 
     // auction to be used by our strategy
     Auction public auction;
-    AuctionFactory public auctionFactory =
-        AuctionFactory(0xCfA510188884F199fcC6e750764FAAbE6e56ec40);
+    AuctionFactory public auctionFactory = AuctionFactory(0xCfA510188884F199fcC6e750764FAAbE6e56ec40);
 
     mapping(string => address) public tokenAddrs;
 
@@ -95,19 +98,15 @@ contract Setup is Test, IEvents {
         vm.prank(management);
         strategy.setMinAmountToSell(50e18);
 
-        defaultToAuctionIfRewardPoolIsThin();
+        defaultToAuction();
 
         factory = strategy.FACTORY();
 
         // manually top-up rewards so we don't run into EOW with no rewards
         uint256 periodFinish = IStaking(staking).periodFinish();
-        uint256 timeLeft = periodFinish > block.timestamp
-            ? periodFinish - block.timestamp
-            : 0;
+        uint256 timeLeft = periodFinish > block.timestamp ? periodFinish - block.timestamp : 0;
         uint256 week = 86400 * 7;
-        uint256 toSend = timeLeft < week
-            ? IStaking(staking).rewardRate() * (week - timeLeft)
-            : 0; // use current rewardRate, scaled by week time elapsed
+        uint256 toSend = timeLeft < week ? IStaking(staking).rewardRate() * (week - timeLeft) : 0; // use current rewardRate, scaled by week time elapsed
         if (toSend > 0) {
             airdrop(ERC20(strategy.REWARDS_TOKEN()), staking, toSend * 2); // add rewards without clobbering already-funded emissions
             vm.prank(IStaking(staking).rewardsDistribution());
@@ -126,9 +125,7 @@ contract Setup is Test, IEvents {
     function setUpStrategy() public returns (address) {
         // we save the strategy as a IStrategyInterface to give it the needed interface
         vm.startPrank(management);
-        IStrategyInterface _strategy = IStrategyInterface(
-            address(new GroveCompounder())
-        );
+        IStrategyInterface _strategy = IStrategyInterface(address(new GroveCompounder()));
 
         // setup the strategy
         _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
@@ -159,13 +156,7 @@ contract Setup is Test, IEvents {
 
     function setUpAuction(address _token) public {
         // deploy auction for the strategy
-        auction = Auction(
-            auctionFactory.createNewAuction(
-                address(asset),
-                address(strategy),
-                management
-            )
-        );
+        auction = Auction(auctionFactory.createNewAuction(address(asset), address(strategy), management));
 
         // enable reward token on our auction
         vm.prank(management);
@@ -173,17 +164,18 @@ contract Setup is Test, IEvents {
     }
 
     function rewardSalePoolHasUsableLiquidity() public view returns (bool) {
-        return
-            IUniswapV3Pool(GROVE_USDC_V3_POOL).liquidity() >=
-            MIN_REWARD_POOL_LIQUIDITY &&
-            ERC20(USDC).balanceOf(GROVE_USDC_V3_POOL) >=
-            MIN_REWARD_POOL_USDC_BALANCE;
+        return IUniswapV3Pool(GROVE_USDC_V3_POOL).liquidity() >= MIN_REWARD_POOL_LIQUIDITY
+            && ERC20(USDC).balanceOf(GROVE_USDC_V3_POOL) >= MIN_REWARD_POOL_USDC_BALANCE;
     }
 
     function rewardV4PoolHasUsableLiquidity() public view returns (bool) {
-        try
-            UNISWAP_V4_STATE_VIEW.getLiquidity(GROVE_USDC_V4_POOL_ID)
-        returns (uint128 liquidity) {
+        return _v4PoolHasUsableLiquidity(GROVE_USDC_V4_POOL_ID) || _v4PoolHasUsableLiquidity(GROVE_USDC_V4_POOL_ID_TWO)
+            || _v4PoolHasUsableLiquidity(GROVE_USDC_V4_POOL_ID_THREE)
+            || _v4PoolHasUsableLiquidity(GROVE_USDC_V4_POOL_ID_FOUR);
+    }
+
+    function _v4PoolHasUsableLiquidity(bytes32 _poolId) internal view returns (bool) {
+        try UNISWAP_V4_STATE_VIEW.getLiquidity(_poolId) returns (uint128 liquidity) {
             return liquidity >= MIN_REWARD_POOL_LIQUIDITY;
         } catch {
             return false;
@@ -191,17 +183,15 @@ contract Setup is Test, IEvents {
     }
 
     function rewardPricingHasUsableLiquidity() public view returns (bool) {
-        return
-            rewardSalePoolHasUsableLiquidity() ||
-            rewardV4PoolHasUsableLiquidity();
+        return rewardSalePoolHasUsableLiquidity() || rewardV4PoolHasUsableLiquidity();
     }
 
-    function defaultToAuctionIfRewardPoolIsThin() internal {
-        if (rewardSalePoolHasUsableLiquidity()) return;
-
+    function defaultToAuction() internal {
         vm.startPrank(management);
         strategy.setAuction(address(auction));
-        strategy.setUseAuction(true);
+        if (!strategy.useAuction()) {
+            strategy.setUseAuction(true);
+        }
         vm.stopPrank();
 
         defaultedToAuction = true;
@@ -217,22 +207,12 @@ contract Setup is Test, IEvents {
 
         // check for reward token balance in auction
         uint256 rewardBalance = ERC20(rewardsToken).balanceOf(address(auction));
-        uint256 strategyBalance = ERC20(rewardsToken).balanceOf(
-            address(auction)
-        );
-        console2.log(
-            "Reward token sitting in our strategy",
-            strategyBalance / 1e18,
-            "* 1e18"
-        );
+        uint256 strategyBalance = ERC20(rewardsToken).balanceOf(address(auction));
+        console2.log("Reward token sitting in our strategy", strategyBalance / 1e18, "* 1e18");
 
         // if we have reward tokens, sweep it out, and send back our designated profitAmount
         if (rewardBalance > 0) {
-            console2.log(
-                "Reward token sitting in our auction",
-                rewardBalance / 1e18,
-                "* 1e18"
-            );
+            console2.log("Reward token sitting in our auction", rewardBalance / 1e18, "* 1e18");
 
             vm.prank(address(auction));
             ERC20(rewardsToken).transfer(user, rewardBalance);
@@ -244,11 +224,7 @@ contract Setup is Test, IEvents {
         assertEq(rewardBalance, 0, "!rewardBalance");
     }
 
-    function depositIntoStrategy(
-        IStrategyInterface _strategy,
-        address _user,
-        uint256 _amount
-    ) public {
+    function depositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
         vm.prank(_user);
         asset.approve(address(_strategy), _amount);
 
@@ -256,11 +232,7 @@ contract Setup is Test, IEvents {
         _strategy.deposit(_amount, _user);
     }
 
-    function mintAndDepositIntoStrategy(
-        IStrategyInterface _strategy,
-        address _user,
-        uint256 _amount
-    ) public {
+    function mintAndDepositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
         airdrop(asset, _user, _amount);
         depositIntoStrategy(_strategy, _user, _amount);
     }
@@ -273,9 +245,7 @@ contract Setup is Test, IEvents {
         uint256 _totalIdle
     ) public {
         uint256 _assets = _strategy.totalAssets();
-        uint256 _balance = ERC20(_strategy.asset()).balanceOf(
-            address(_strategy)
-        );
+        uint256 _balance = ERC20(_strategy.asset()).balanceOf(address(_strategy));
         uint256 _idle = _balance > _assets ? _assets : _balance;
         uint256 _debt = _assets - _idle;
         assertEq(_assets, _totalAssets, "!totalAssets");
