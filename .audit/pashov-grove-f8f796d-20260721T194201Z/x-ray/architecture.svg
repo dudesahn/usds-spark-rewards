@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1059" height="490" viewBox="0 0 424 196" font-family="Arial, sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 8 6" refX="8" refY="3"
+      markerWidth="4" markerHeight="3" orient="auto">
+      <path d="M0.5,0.5 L7,3 L0.5,5.5" fill="none" stroke="#94A3B8"
+        stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
+    </marker>
+    <filter id="shadow" x="-6%" y="-8%" width="112%" height="128%">
+      <feDropShadow dx="0" dy="0.5" stdDeviation="0.8"
+        flood-color="#000" flood-opacity="0.05"/>
+    </filter>
+  </defs>
+  <rect width="424" height="196" fill="#F8F9FB" rx="3"/>
+  <text x="212" y="11" text-anchor="middle" font-size="6" font-weight="700" fill="#1E293B">Grove USDS Compounder Architecture</text>
+  <rect x="137" y="16" width="150" height="10" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="142" y="18.5" width="5" height="5" rx="2.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <text x="150" y="22.5" font-size="3.5" fill="#1E293B">Actor</text>
+  <rect x="182" y="18.5" width="5" height="5" rx="1.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="183" y="19.5" width="0.8" height="3" rx="0.4" fill="#3B82F6"/>
+  <text x="190" y="22.5" font-size="3.5" fill="#1E293B">Protocol</text>
+  <rect x="230" y="18.5" width="5" height="5" rx="1.5" fill="#fff" stroke="#E2E5EA" stroke-width="0.4"/>
+  <rect x="231" y="19.5" width="0.8" height="3" rx="0.4" fill="#F59E0B"/>
+  <text x="238" y="22.5" font-size="3.5" fill="#1E293B">External</text>
+  <rect x="20.0" y="84.0" width="383.6" height="40.0" rx="5" fill="#EDEEF2"/>
+  <text x="400.6" y="89.0" text-anchor="end" font-size="3.5" fill="#94A3B8" font-weight="500">In Scope</text>
+  <rect x="20.0" y="146.0" width="383.6" height="40.0" rx="5" fill="#EDEEF2"/>
+  <text x="400.6" y="151.0" text-anchor="end" font-size="3.5" fill="#94A3B8" font-weight="500">External Dependencies</text>
+  <path d="M65.3,46.0 C65.3,70.0 114.8,70.0 114.8,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M143.3,46.0 C143.3,70.0 114.8,70.0 114.8,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M227.3,46.0 C227.3,70.0 114.8,70.0 114.8,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M227.3,46.0 C227.3,70.0 244.0,70.0 244.0,94.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M114.8,114.0 C114.8,135.0 270.4,135.0 270.4,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M114.8,114.0 C114.8,135.0 71.2,135.0 71.2,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M114.8,114.0 C114.8,135.0 170.8,135.0 170.8,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M244.0,114.0 C244.0,135.0 270.4,135.0 270.4,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <path d="M244.0,114.0 C244.0,135.0 363.6,135.0 363.6,156.0" fill="none" stroke="#94A3B8" stroke-width="0.5" marker-end="url(#ah)"/>
+  <g filter="url(#shadow)">
+    <rect x="37.3" y="32.0" width="56.0" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="65.3" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">User</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="115.3" y="32.0" width="56.0" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="143.3" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Keeper</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="193.3" y="32.0" width="68.0" height="14" rx="7" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <text x="227.3" y="40.8" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Management</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="68.8" y="94.0" width="92.0" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="71.8" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="114.8" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">GroveCompounder</text>
+    <text x="114.8" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">Strategy</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="195.6" y="94.0" width="96.8" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="198.6" y="97.0" width="1.4" height="14" rx="0.6" fill="#3B82F6"/>
+    <text x="244.0" y="103.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Grove APR Oracle</text>
+    <text x="244.0" y="108.5" text-anchor="middle" font-size="3.5" fill="#64748B">Pricing</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="229.2" y="156.0" width="82.4" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="232.2" y="159.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="270.4" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Grove Staking</text>
+    <text x="270.4" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">USDS/GROVE</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="30.0" y="156.0" width="82.4" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="33.0" y="159.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="71.2" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Yearn Auction</text>
+    <text x="71.2" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">Rewards</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="134.4" y="156.0" width="72.8" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="137.4" y="159.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="170.8" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">PSM Wrapper</text>
+    <text x="170.8" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">USDC/USDS</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="333.6" y="156.0" width="60.0" height="20" rx="3" fill="#fff" stroke="#E2E5EA" stroke-width="0.5"/>
+    <rect x="336.6" y="159.0" width="1.4" height="14" rx="0.6" fill="#F59E0B"/>
+    <text x="363.6" y="165.5" text-anchor="middle" font-size="4.8" font-weight="600" fill="#1E293B">Uniswap</text>
+    <text x="363.6" y="170.5" text-anchor="middle" font-size="3.5" fill="#64748B">V3/V4</text>
+  </g>
+  <rect x="74.9" y="65.0" width="30.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="90.1" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">vault entry</text>
+  <rect x="110.3" y="65.0" width="37.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="129.1" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">report rewards</text>
+  <rect x="159.5" y="65.0" width="23.2" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="171.1" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">set sale</text>
+  <rect x="222.8" y="65.0" width="25.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="235.6" y="70.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">set pools</text>
+  <rect x="178.6" y="130.0" width="28.0" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="192.6" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">stake USDS</text>
+  <rect x="75.4" y="130.0" width="35.2" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="93.0" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">auction GROVE</text>
+  <rect x="130.0" y="130.0" width="25.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="142.8" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">mint USDS</text>
+  <rect x="238.4" y="130.0" width="37.6" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="257.2" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">read emissions</text>
+  <rect x="288.6" y="130.0" width="30.4" height="6.0" rx="1" fill="#F8F9FB"/>
+  <text x="303.8" y="135.0" font-size="4" fill="#1E293B" font-weight="500" text-anchor="middle">price GROVE</text>
+</svg>

@@ -1,0 +1,10 @@
+# Keep committed audit artifacts focused on durable reports, ledgers, PoCs,
+# and manifests. These paths are scan-local/generated bulk.
+codex-security/**/artifacts/**/validation_artifacts/
+codex-security/**/artifacts/deep_discovery/
+codex-security/**/artifacts/quarantine/
+codex-security/**/artifacts/**/forge-out/
+codex-security/**/artifacts/**/forge-cache/
+codex-security/**/artifacts/**/broadcast/
+codex-security/**/artifacts/**/cache/
+codex-security/**/artifacts/**/lcov.info

@@ -1,0 +1,11 @@
+flowchart LR
+    Depositor["Untrusted depositor"] -->|request deposit| Queue["Cancelable USDS deposit queue"]
+    Keeper["Keeper"] -->|advance lifecycle| Coordinator["Reward settlement coordinator"]
+    Staking["External staking\nclaimable GROVE"] -->|checkpoint / claim| Coordinator
+    Coordinator -->|kick only in ready state| Auction["External Auction\npublic state"]
+    Attacker["Untrusted caller"] -->|donate + pre-kick| Auction
+    Auction -->|USDS proceeds| Coordinator
+    Coordinator -->|settle old reward epoch| Strategy["GroveCompounder"]
+    Queue -->|mint after clean checkpoint| Strategy
+    Strategy --> Accounting["Yearn share accounting"]
+    Coordinator -.->|active auction: wait without reverting report| Auction

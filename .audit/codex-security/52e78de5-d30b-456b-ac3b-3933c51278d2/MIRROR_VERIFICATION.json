@@ -1,0 +1,17 @@
+{
+  "documentType": "codex-security.mirror-verification",
+  "schemaVersion": "1.0",
+  "scanId": "52e78de5-d30b-456b-ac3b-3933c51278d2",
+  "verifiedAt": "2026-07-21T22:26:10Z",
+  "result": "match",
+  "sourceScanDir": "/private/var/folders/s_/3h_wvzqx385frkp70gr8cpdc0000gn/T/codex-security-scans-rTv3KF/codex-security-usds-spark-rewards-f8f796d-019f8637/f8f796db93c52432cca0ed26861e94f5aaf20975_20260721T194756Z_3uk3yidh",
+  "mirrorDir": "/Users/dudesahn/Documents/GitHub/dudesahn/strategies/usds-spark-rewards/.audit/codex-security/52e78de5-d30b-456b-ac3b-3933c51278d2",
+  "inventoryAlgorithm": "sha256(sorted JSONL rows of entry type, relative path, and file size/content hash or symlink target)",
+  "sourceAggregateSha256": "a47b00d57cc8f1cc888c6c926972e096c36bb87bd647150e038675673111f852",
+  "mirrorAggregateSha256": "a47b00d57cc8f1cc888c6c926972e096c36bb87bd647150e038675673111f852",
+  "entryCount": 32217,
+  "regularFileCount": 25805,
+  "symlinkCount": 2,
+  "directoryCount": 6410,
+  "scopeNote": "The aggregate covers the complete sealed source bundle and its mirror before this verification receipt was added to the mirror."
+}

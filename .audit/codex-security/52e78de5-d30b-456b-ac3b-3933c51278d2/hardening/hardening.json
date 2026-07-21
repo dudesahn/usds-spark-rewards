@@ -1,0 +1,265 @@
+{
+  "documentType": "codex-security.hardening-analysis",
+  "schemaVersion": "1.0",
+  "analysisId": "hardening_final",
+  "sourceScan": {
+    "scanId": "52e78de5-d30b-456b-ac3b-3933c51278d2",
+    "targetRevision": "f8f796db93c52432cca0ed26861e94f5aaf20975",
+    "sourceDrift": "none"
+  },
+  "assessment": {
+    "outcome": "opportunities_identified",
+    "summary": "The two accepted findings support one bounded opportunity to make unsettled reward state an owned boundary for report progress and share issuance; focused local controls are preferred under current constraints."
+  },
+  "constraints": {
+    "profile": "balanced",
+    "changeHorizons": ["incremental", "medium_term"],
+    "nonNegotiables": [
+      "Principal withdrawals remain available while reward settlement is delayed.",
+      "The existing staking, Auction, and Yearn tokenized-strategy interfaces remain supported."
+    ],
+    "assumptions": [
+      "No measured gas, latency, memory, or storage budget was supplied.",
+      "Bounded deposit unavailability is acceptable unless immediate deposit intake is confirmed as a product requirement."
+    ]
+  },
+  "opportunities": [
+    {
+      "opportunityId": "own-reward-lifecycle-boundary",
+      "title": "Own the reward-lifecycle boundary",
+      "summary": "Coordinate report progress and share issuance against one explicit view of claimable, held, auctioned, and returned reward value.",
+      "diagnosis": "GroveCompounder has no single owned rule for unsettled rewards: report can consume attacker-controlled Auction state as a revert condition while deposits mint from reported assets that omit the same reward lifecycle.",
+      "evidence": [
+        {
+          "claimType": "observed",
+          "sourceKind": "finding",
+          "findingId": "csf_caa09b28e81d6df8702f4f3b",
+          "path": "src/GroveCompounder.sol",
+          "claim": "The auction-mode report transfers GROVE and calls kick without tolerating an already-active Auction, so public external state can revert the report."
+        },
+        {
+          "claimType": "observed",
+          "sourceKind": "finding",
+          "findingId": "csf_b51d06995c5b3b21d7a6c516",
+          "path": "src/GroveCompounder.sol",
+          "claim": "Deposits mint against report-boundary assets that omit claimable and auction-pending rewards, allowing a late cohort to share old reward proceeds."
+        },
+        {
+          "claimType": "inferred",
+          "sourceKind": "source",
+          "path": "src/GroveCompounder.sol",
+          "claim": "Deposit admission, reward claiming, auction initiation, and report accounting each own only a partial lifecycle check rather than a common settlement invariant."
+        }
+      ],
+      "desiredInvariants": [
+        "A keeper report advances accounting even when the configured reward Auction is already active.",
+        "GROVE is transferred only after the strategy establishes that a new auction can start.",
+        "New shares are not minted against a reported asset total that excludes a material reward lot earned by the existing supply.",
+        "Every unsettled state has an observable recovery transition while principal withdrawals remain available."
+      ],
+      "proposalPath": "proposals/own-reward-lifecycle-boundary.md",
+      "options": [
+        {
+          "optionId": "local-controls",
+          "title": "Focused lifecycle controls",
+          "kind": "baseline",
+          "summary": "Skip transfer and kick while an auction is active, continue the report, and block new share issuance while a material old reward lot is unsettled.",
+          "diagramPaths": {
+            "before": "diagrams/own-reward-lifecycle-boundary-before.mmd",
+            "after": "diagrams/own-reward-lifecycle-boundary-local-controls-after.mmd"
+          },
+          "findingCoverage": [
+            {
+              "findingId": "csf_caa09b28e81d6df8702f4f3b",
+              "effect": "addresses",
+              "tacticalFixRequired": true,
+              "rationale": "The active-auction guard and non-reverting deferral are the direct tactical fix and must pass the original pre-kick PoC."
+            },
+            {
+              "findingId": "csf_b51d06995c5b3b21d7a6c516",
+              "effect": "addresses",
+              "tacticalFixRequired": true,
+              "rationale": "Fail-closed minting until a material old lot is settled preserves cohort ownership, subject to a dust-resistant materiality policy."
+            }
+          ],
+          "tradeoffs": [
+            {
+              "dimension": "security",
+              "direction": "improves",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "The known active-auction revert is removed and material stale-priced minting is refused, though distributed checks can drift and a poor dust threshold can be griefed.",
+              "validationPlan": "Run both original PoCs plus fuzzing across claimable, held, auctioned, returned, reported, dust, and shutdown states."
+            },
+            {
+              "dimension": "performance",
+              "direction": "regresses",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "Relevant reports and deposit-limit queries gain reward and Auction state reads but no new transaction hop.",
+              "validationPlan": "Compare gas for no-reward, sub-threshold, active-auction, clean-settlement, and deposit paths against the affected revision."
+            },
+            {
+              "dimension": "memory",
+              "direction": "neutral",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "The design needs only bounded lifecycle values and events rather than per-depositor records.",
+              "validationPlan": "Inspect storage layout and record the exact new slots before deployment."
+            },
+            {
+              "dimension": "reliability",
+              "direction": "improves",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "Reports continue through an active auction, but deposits may be intentionally unavailable until cleanup and must not become permanently dust-gated.",
+              "validationPlan": "Exercise stale Auction, missed keeper, paused staking, public dust donation, and recovery time bounds while asserting withdrawals remain live."
+            },
+            {
+              "dimension": "operability",
+              "direction": "regresses",
+              "confidence": "medium",
+              "basis": "hypothetical",
+              "assessment": "Operators need alerts and a runbook for deferred sale and deposit-gate age, but no new service or custody component.",
+              "validationPlan": "Dry-run alerts and recovery procedures with explicit maximum gate and deferred-sale durations."
+            },
+            {
+              "dimension": "migration",
+              "direction": "neutral",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "The existing synchronous interface is preserved; deposits can stay closed while the focused change and checkpoint are deployed.",
+              "validationPlan": "Test upgrade or replacement deployment, clean-state checkpoint, reopen, shutdown, and rollback on the pinned integration environment."
+            }
+          ],
+          "residualRisks": [
+            "A future reward path can omit the shared predicate if enforcement remains distributed.",
+            "A materiality policy can either permit small dilution or expose deposit availability to dust griefing.",
+            "External Auction and reward-price liveness remain outside the strategy boundary."
+          ],
+          "implementationReadiness": {
+            "affectedComponents": ["src/GroveCompounder.sol"],
+            "workPackages": [
+              "Define a named, dust-resistant unsettled-reward predicate and recovery states.",
+              "Make report-time Auction handling non-reverting and idempotent.",
+              "Apply the settlement gate to new share issuance without restricting withdrawals.",
+              "Add events, monitoring, runbook, PoC regressions, and lifecycle fuzz tests."
+            ],
+            "acceptanceCriteria": [
+              "The public pre-kick sequence cannot stop lastReport from advancing.",
+              "Late shares receive none of a material pre-entry reward lot after settlement and unlock.",
+              "Dust donations cannot hold deposits closed beyond the documented policy.",
+              "Withdrawals and emergency withdrawal remain available in every reward state."
+            ],
+            "migrationNotes": ["Keep deposits closed until existing rewards are checkpointed and the clean predicate is observed."],
+            "rollback": "Close deposits, preserve withdrawal access, and return to the previous implementation only after any partially initiated reward operation is understood."
+          }
+        },
+        {
+          "optionId": "queued-settlement",
+          "title": "Queued settlement boundary",
+          "kind": "structural",
+          "summary": "Accept cancelable USDS requests into a queue, advance old rewards through an explicit coordinator, and mint shares only at a clean post-settlement checkpoint.",
+          "diagramPaths": {
+            "before": "diagrams/own-reward-lifecycle-boundary-before.mmd",
+            "after": "diagrams/own-reward-lifecycle-boundary-queued-settlement-after.mmd"
+          },
+          "findingCoverage": [
+            {
+              "findingId": "csf_caa09b28e81d6df8702f4f3b",
+              "effect": "addresses",
+              "tacticalFixRequired": true,
+              "rationale": "The coordinator treats an active Auction as a waiting state rather than a report exception, but the original report path needs protection during migration."
+            },
+            {
+              "findingId": "csf_b51d06995c5b3b21d7a6c516",
+              "effect": "addresses",
+              "tacticalFixRequired": true,
+              "rationale": "Queued requests do not receive shares until the old reward epoch is settled; existing direct deposits must remain closed during migration."
+            }
+          ],
+          "tradeoffs": [
+            {
+              "dimension": "security",
+              "direction": "improves",
+              "confidence": "medium",
+              "basis": "source-derived",
+              "assessment": "One state machine owns settlement and mint activation, reducing lifecycle drift while adding queue custody, ordering, and cancellation attack surface.",
+              "validationPlan": "Model and fuzz every allowed transition, cancellation race, public Auction change, shutdown, and reentrancy boundary; obtain independent review."
+            },
+            {
+              "dimension": "performance",
+              "direction": "regresses",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "Deposit request and share activation become separate transactions and may require batching and additional external calls.",
+              "validationPlan": "Measure request, cancellation, lifecycle advancement, and activation gas plus end-to-end latency for representative batch sizes."
+            },
+            {
+              "dimension": "memory",
+              "direction": "regresses",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "The queue and coordinator retain request, batch, and lifecycle state that the current synchronous design does not store.",
+              "validationPlan": "Measure storage slots and per-request state growth, and compare individual versus aggregate queue designs."
+            },
+            {
+              "dimension": "reliability",
+              "direction": "improves",
+              "confidence": "low",
+              "basis": "hypothetical",
+              "assessment": "Deposit intake is isolated from settlement and requests remain cancelable, but activation now depends on coordinator and keeper progress.",
+              "validationPlan": "Fault-inject missed keepers, stale auctions, paused staking, partial settlement, upgrade interruption, and cancellation under maximum-delay requirements."
+            },
+            {
+              "dimension": "operability",
+              "direction": "regresses",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "Operators must monitor queue age, batches, cancellations, lifecycle states, keeper retries, and stuck-fund recovery.",
+              "validationPlan": "Run a capped pilot and incident exercise with dashboards, alerts, and documented stuck-state recovery."
+            },
+            {
+              "dimension": "migration",
+              "direction": "regresses",
+              "confidence": "high",
+              "basis": "source-derived",
+              "assessment": "A new custody component and delayed-mint interface require UX, integration, rollout, drain, and independent-audit work.",
+              "validationPlan": "Deploy with intake disabled, shadow state, pilot a capped queue, prove every request can activate or cancel, and rehearse a full drain."
+            }
+          ],
+          "residualRisks": [
+            "External Auction liveness can still delay queued activation.",
+            "The coordinator and queue introduce new custody, ordering, upgrade, and cancellation risks.",
+            "A keeper failure can leave requests waiting until cancellation or recovery."
+          ],
+          "implementationReadiness": {
+            "affectedComponents": ["src/GroveCompounder.sol", "new reward settlement coordinator", "new cancelable deposit queue"],
+            "workPackages": [
+              "Specify lifecycle, queue custody, ordering, cancellation, maximum delay, shutdown, and upgrade invariants.",
+              "Implement and formally review coordinator and queue transitions.",
+              "Add strategy adapter, monitoring, capped pilot, migration, drain, and rollback procedures.",
+              "Complete independent security review before uncapped custody."
+            ],
+            "acceptanceCriteria": [
+              "Every request can either mint after a clean checkpoint or cancel without loss.",
+              "An active or adversarially pre-kicked Auction cannot revert a report transition.",
+              "No queued cohort receives value from a reward epoch that precedes activation.",
+              "Maximum delay, throughput, gas, and storage stay within user-approved limits."
+            ],
+            "migrationNotes": ["Do not migrate existing shares into the queue; keep direct deposits closed while the new boundary is piloted."],
+            "rollback": "Disable intake, preserve cancellation, drain every pending request, and leave existing strategy shares on the prior withdrawal path."
+          }
+        }
+      ],
+      "recommendedOptionId": "local-controls",
+      "recommendation": "Use focused lifecycle controls unless immediate deposit request intake during reward settlement is non-negotiable; choose the queued boundary only with explicit product support for its custody and operational burden."
+    }
+  ],
+  "openQuestions": [
+    "Must deposits remain immediately mintable or merely requestable during reward settlement?",
+    "What materiality threshold resists dust griefing while preventing meaningful reward dilution?",
+    "What maximum settlement and deposit-gate duration is operationally acceptable?",
+    "Which Auction views and kick policies are guaranteed across supported deployments?"
+  ]
+}

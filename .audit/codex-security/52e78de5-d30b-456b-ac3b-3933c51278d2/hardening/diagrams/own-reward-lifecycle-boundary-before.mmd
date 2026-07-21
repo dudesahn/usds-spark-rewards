@@ -1,0 +1,10 @@
+flowchart LR
+    Depositor["Untrusted depositor"] -->|deposit / mint now| Strategy["GroveCompounder"]
+    Staking["External staking\nclaimable GROVE"] -->|earned / getReward| Strategy
+    Strategy -->|transfer GROVE + kick| Auction["External Auction\npublic state"]
+    Attacker["Untrusted caller"] -->|donate + pre-kick| Auction
+    Keeper["Keeper"] -->|report| Strategy
+    Auction -->|USDS proceeds later| Strategy
+    Strategy -->|lastTotalAssets after report| Accounting["Yearn share accounting"]
+    Auction -->|active-state revert| Strategy
+

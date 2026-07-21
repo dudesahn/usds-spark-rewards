@@ -1,0 +1,9 @@
+{"path":"src/GroveCompounder.sol","area":"production","preview":""}
+{"path":"src/interfaces/IOracle.sol","area":"production","preview":""}
+{"path":"src/interfaces/IPsmWrapper.sol","area":"production","preview":""}
+{"path":"src/interfaces/IStaking.sol","area":"production","preview":""}
+{"path":"src/interfaces/IStrategyInterface.sol","area":"production","preview":""}
+{"path":"src/interfaces/IUniswapV4StateView.sol","area":"production","preview":""}
+{"path":"src/libraries/UniswapV3SwapSimulator.sol","area":"production","preview":""}
+{"path":"src/libraries/UniswapV3SwapSimulatorCore.sol","area":"production","preview":""}
+{"path":"src/periphery/GroveCompounderAprOracle.sol","area":"production","preview":""}

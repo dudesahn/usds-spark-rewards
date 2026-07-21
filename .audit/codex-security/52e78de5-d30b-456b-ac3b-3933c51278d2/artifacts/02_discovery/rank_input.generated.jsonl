@@ -1,0 +1,8 @@
+{"path":".solhint.json","area":".","preview":"key extends\nkey plugins\nkey rules [compiler-version, code-complexity, const-name-snakecase, function-max-lines, func-visibility, max-line-length, avoid-suicide, avoid-sha3, not-rely-on-time, private-vars-leading-underscore, reason-string, no-console]"}
+{"path":"broadcast/DeployStrategyAndOracle.s.sol/1/run-1752332740.json","area":".","preview":"key transactions\nkey receipts\nkey libraries\nkey pending\nkey returns\nkey timestamp\nkey chain\nkey commit"}
+{"path":"broadcast/DeployStrategyAndOracle.s.sol/1/run-1758060711350.json","area":".","preview":"key transactions\nkey receipts\nkey libraries\nkey pending\nkey returns\nkey timestamp\nkey chain\nkey commit"}
+{"path":"broadcast/DeployStrategyAndOracle.s.sol/1/run-1770400773239.json","area":".","preview":"key transactions\nkey receipts\nkey libraries\nkey pending\nkey returns\nkey timestamp\nkey chain\nkey commit"}
+{"path":"broadcast/DeployStrategyAndOracle.s.sol/1/run-latest.json","area":".","preview":"key transactions\nkey receipts\nkey libraries\nkey pending\nkey returns\nkey timestamp\nkey chain\nkey commit"}
+{"path":"foundry.toml","area":".","preview":"section profile.default"}
+{"path":"package.json","area":".","preview":"key name\nkey devDependencies [prettier, prettier-plugin-solidity, pretty-quick, solc, solhint, solhint-plugin-prettier]\nkey scripts [format, format:check, lint, lint:fix]"}
+{"path":"slither.config.json","area":".","preview":"key detectors_to_exclude\nkey filter_paths"}

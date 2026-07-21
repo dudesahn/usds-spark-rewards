@@ -1,0 +1,29 @@
+{
+  "title": "Grove USDS Compounder Architecture",
+  "nodes": [
+    {"id": "user", "label": "User", "subtitle": "Depositor", "type": "actor", "row": 0},
+    {"id": "keeper", "label": "Keeper", "subtitle": "Reporter", "type": "actor", "row": 0},
+    {"id": "management", "label": "Management", "subtitle": "Config", "type": "actor", "row": 0},
+    {"id": "strategy", "label": "GroveCompounder", "subtitle": "Strategy", "type": "protocol", "row": 1},
+    {"id": "oracle", "label": "Grove APR Oracle", "subtitle": "Pricing", "type": "protocol", "row": 1},
+    {"id": "staking", "label": "Grove Staking", "subtitle": "USDS/GROVE", "type": "external", "row": 2},
+    {"id": "auction", "label": "Yearn Auction", "subtitle": "Rewards", "type": "external", "row": 2},
+    {"id": "psm", "label": "PSM Wrapper", "subtitle": "USDC/USDS", "type": "external", "row": 2},
+    {"id": "uni", "label": "Uniswap", "subtitle": "V3/V4", "type": "external", "row": 2}
+  ],
+  "edges": [
+    {"from": "user", "to": "strategy", "label": "vault entry"},
+    {"from": "keeper", "to": "strategy", "label": "report rewards"},
+    {"from": "management", "to": "strategy", "label": "set sale"},
+    {"from": "management", "to": "oracle", "label": "set pools"},
+    {"from": "strategy", "to": "staking", "label": "stake USDS"},
+    {"from": "strategy", "to": "auction", "label": "auction GROVE"},
+    {"from": "strategy", "to": "psm", "label": "mint USDS"},
+    {"from": "oracle", "to": "staking", "label": "read emissions"},
+    {"from": "oracle", "to": "uni", "label": "price GROVE"}
+  ],
+  "groups": [
+    {"label": "In Scope", "nodes": ["strategy", "oracle"]},
+    {"label": "External Dependencies", "nodes": ["staking", "auction", "psm", "uni"]}
+  ]
+}

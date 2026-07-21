@@ -1,0 +1,11 @@
+flowchart LR
+    Depositor["Untrusted depositor"] -->|mint only when clean| Gate["Reward-settlement gate"]
+    Gate --> Strategy["GroveCompounder"]
+    Staking["External staking\nclaimable GROVE"] -->|earned / getReward| Strategy
+    Keeper["Keeper"] -->|report| Strategy
+    Strategy -->|kick only when inactive| Auction["External Auction\npublic state"]
+    Attacker["Untrusted caller"] -->|donate + pre-kick| Auction
+    Auction -->|USDS proceeds later| Strategy
+    Strategy -->|report still advances| Accounting["Yearn share accounting"]
+    Auction -.->|active: retain GROVE, no re-kick| Strategy
+
