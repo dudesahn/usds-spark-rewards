@@ -3,60 +3,73 @@ pragma solidity 0.8.28;
 
 import {IStaking} from "src/interfaces/IStaking.sol";
 import {IUniswapV4StateView} from "src/interfaces/IUniswapV4StateView.sol";
-import {UniswapV3SwapSimulator, ISwapRouter, ISwapRouterWithFactory} from "src/libraries/UniswapV3SwapSimulator.sol";
-import {IUniswapV3Factory} from "@uniswap-v3-core/interfaces/IUniswapV3Factory.sol";
-import {IUniswapV3Pool} from "@uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
-import {FullMath} from "@uniswap-v3-core/libraries/FullMath.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {UniswapV4SwapSimulator} from "src/libraries/UniswapV4SwapSimulator.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
+import {FullMath} from "v4-core/libraries/FullMath.sol";
+import {Currency} from "v4-core/types/Currency.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+
+interface IUniswapV4PositionManager {
+    struct PoolKeyData {
+        address currency0;
+        address currency1;
+        uint24 fee;
+        int24 tickSpacing;
+        address hooks;
+    }
+
+    function poolKeys(bytes25 poolId) external view returns (PoolKeyData memory);
+}
 
 contract GroveCompounderAprOracle {
+    using PoolIdLibrary for PoolKey;
+
     event ManagementTransferred(address indexed management);
-    event UniV3FeeSet(uint24 indexed rewardToBaseUniV3Fee);
-    event UniV4PoolSet(bytes32 indexed poolId, bool indexed groveIsToken0);
-    event UniV4PoolAdded(bytes32 indexed poolId, bool indexed groveIsToken0);
+    event UniV4PoolSet(bytes32 indexed poolId, uint24 fee, int24 tickSpacing);
+    event UniV4PoolAdded(bytes32 indexed poolId, uint24 fee, int24 tickSpacing);
     event UniV4PoolRemoved(bytes32 indexed poolId);
-    event UniV4PoolsSet(bytes32[] poolIds, bool[] groveIsToken0);
+    event UniV4PoolsSet(bytes32[] poolIds);
+    event PoolSetterSet(address indexed poolSetter, bool allowed);
 
     struct UniV4PoolConfig {
         bytes32 poolId;
-        bool groveIsToken0;
+        uint24 fee;
+        int24 tickSpacing;
     }
 
-    struct UniV4PoolQuote {
-        bytes32 poolId;
-        bool groveIsToken0;
-        uint128 liquidity;
-        uint256 price;
+    struct RouteData {
+        uint256 totalAmountOut;
+        uint256 amountAllocated;
+        bytes32[] poolIds;
+        uint256[] allocations;
+        uint256[] outputs;
+    }
+
+    struct RoutingState {
+        UniswapV4SwapSimulator.State[] states;
+        UniswapV4SwapSimulator.Preview[] previews;
+        uint24[] swapFees;
+        bool[] eligible;
     }
 
     /// @notice Sky Rewards staking contract
     address public constant STAKING = 0x4E41488C19cD35EB4de3083Fc3e204854c75c86a;
 
-    /// @notice Grove governance token
-    /// @dev Reward token for staking
+    /// @notice Grove governance token and staking reward token
     address public constant GROVE = 0xB30FE1Cf884B48a22a50D22a9282004F2c5E9406;
 
-    /// @notice Token to stake for GROVE rewards
+    /// @notice Token staked to earn GROVE rewards
     address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
 
-    /// @notice GROVE is paired with USDC in UniV3 pool
+    /// @notice GROVE quote token
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
-    /// @notice Uniswap V3 Router address
-    address public constant UNISWAP_V3_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
-
-    /// @notice Default GROVE/USDC 1% UniV3 pool
-    address public constant DEFAULT_GROVE_USDC_V3_POOL = 0x5D23797587B2c17414384384098291c0B1Fe1362;
-
-    /// @notice Default GROVE/USDC 1% UniV3 fee
-    uint24 public constant DEFAULT_REWARD_TO_BASE_UNI_V3_FEE = 10_000;
-
-    /// @notice UniV4 StateView lens
     IUniswapV4StateView public constant UNISWAP_V4_STATE_VIEW =
         IUniswapV4StateView(0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227);
+    IUniswapV4PositionManager public constant UNISWAP_V4_POSITION_MANAGER =
+        IUniswapV4PositionManager(0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e);
 
-    /// @notice UniV4 USDC/GROVE pool key:
-    /// currency0 = USDC, currency1 = GROVE, hooks = address(0)
     bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID =
         0x2897b6ccd757711791a90b723df4f89567568859d040ff97d25cc4a5cb93ea03;
     bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_TWO =
@@ -65,22 +78,26 @@ contract GroveCompounderAprOracle {
         0xb557b2447a4723741959fe7ebd5a37375023931d19f6383cc83bd0d9c8397bb9;
     bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_FOUR =
         0x2e53ef1a957f41bfba562bac317881d6f0ef2d6c217c7279c11b0878f9791ad5;
+    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_FIVE_PERCENT =
+        0xaa0b1a90c6188f42c3603998536418f4eeedccf20b999377dab7e4c6aafc5286;
+    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_VOLUME =
+        0x20d117a32203158c46d0dce34ade2b2cbf846d151e9cea406e0463fe361d82ce;
+    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_KYBER =
+        0x0d40eef4d9600a37016f34d089705e83d8d9e40ac80838abb04a278fa049e874;
 
-    uint256 internal constant SECONDS_PER_YEAR = 31536000;
-    uint256 internal constant Q192 = 1 << 192;
+    uint256 internal constant SECONDS_PER_YEAR = 31_536_000;
     uint256 internal constant MAX_BPS = 10_000;
-    uint256 public constant MIN_REWARD_POOL_LIQUIDITY = 1e12;
-    uint256 public constant MIN_REWARD_POOL_USDC_BALANCE = 1_000e6;
+    bool internal constant GROVE_TO_USDC_ZERO_FOR_ONE = false;
+
+    uint256 public constant GROVE_PRICE_QUOTE_AMOUNT = 10_000e18;
+    uint256 public constant GROVE_PRICE_CHUNK_AMOUNT = 1_000e18;
+    uint256 public constant GROVE_PRICE_CHUNK_COUNT = 10;
+    uint256 public constant MAX_V4_POOLS = 10;
     uint256 public constant MAX_V4_POOL_PRICE_DEVIATION_BPS = 1_000;
     uint256 public constant MAX_EXPECTED_APR = 5e17;
 
-    /// @notice Address allowed to update oracle pool configuration
     address public management;
-
-    /// @notice UniV3 fee used for quoting GROVE -> USDC
-    uint24 public rewardToBaseUniV3Fee = DEFAULT_REWARD_TO_BASE_UNI_V3_FEE;
-
-    /// @notice UniV4 pools used as fallback pricing candidates
+    mapping(address => bool) public poolSetters;
     UniV4PoolConfig[] internal v4Pools;
 
     modifier onlyManagement() {
@@ -88,47 +105,46 @@ contract GroveCompounderAprOracle {
         _;
     }
 
+    modifier onlyPoolSetter() {
+        _onlyPoolSetter();
+        _;
+    }
+
     function _onlyManagement() internal view {
         require(msg.sender == management, "!management");
     }
 
+    function _onlyPoolSetter() internal view {
+        require(msg.sender == management || poolSetters[msg.sender], "!pool setter");
+    }
+
     constructor() {
         management = msg.sender;
-        v4Pools.push(UniV4PoolConfig({poolId: DEFAULT_GROVE_USDC_V4_POOL_ID, groveIsToken0: false}));
-        v4Pools.push(UniV4PoolConfig({poolId: DEFAULT_GROVE_USDC_V4_POOL_ID_TWO, groveIsToken0: false}));
-        v4Pools.push(UniV4PoolConfig({poolId: DEFAULT_GROVE_USDC_V4_POOL_ID_THREE, groveIsToken0: false}));
-        v4Pools.push(UniV4PoolConfig({poolId: DEFAULT_GROVE_USDC_V4_POOL_ID_FOUR, groveIsToken0: false}));
+        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID_FIVE_PERCENT);
+        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID);
+        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID_TWO);
+        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID_VOLUME);
+        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID_KYBER);
         emit ManagementTransferred(msg.sender);
     }
 
     /**
-     * @param _strategy The strategy to get the apr for. Not a used variable in this case.
-     * @param _delta The difference in debt.
-     * @return oracleApr The expected apr for the strategy represented as 1e18.
+     * @dev The strategy parameter is unused because all strategies share the staking rewards.
+     * @param _delta The proposed change in staked USDS.
+     * @return oracleApr Expected APR represented as 1e18.
      */
-    function aprAfterDebtChange(address _strategy, int256 _delta) external view returns (uint256 oracleApr) {
-        // pull total staked and reward rate from staking contract
+    function aprAfterDebtChange(address, int256 _delta) external view returns (uint256 oracleApr) {
         uint256 assets = IStaking(STAKING).totalSupply();
-        uint256 rewardRate = IStaking(STAKING).rewardRate(); // tokens per second
+        uint256 rewardRate = IStaking(STAKING).rewardRate();
 
-        if (block.timestamp > IStaking(STAKING).periodFinish()) {
-            return 0;
-        }
+        if (block.timestamp > IStaking(STAKING).periodFinish()) return 0;
 
         uint256 price = _grovePrice();
+        assets = _delta < 0 ? assets - uint256(-_delta) : assets + uint256(_delta);
 
-        // adjust for ∆ assets
-        if (_delta < 0) {
-            assets = assets - uint256(-_delta);
-        } else {
-            assets = assets + uint256(_delta);
-        }
-
-        // Don't divide by 0. With no staked assets, the implied APR is outside the sane oracle range.
         if (assets == 0) revert("apr too high");
 
-        // price is returned as 1e18 USDS per GROVE
-        oracleApr = (rewardRate * SECONDS_PER_YEAR * price) / (assets);
+        oracleApr = (rewardRate * SECONDS_PER_YEAR * price) / assets;
         require(oracleApr <= MAX_EXPECTED_APR, "apr too high");
     }
 
@@ -138,32 +154,44 @@ contract GroveCompounderAprOracle {
         emit ManagementTransferred(_management);
     }
 
-    function setUniV3Fee(uint24 _rewardToBaseUniV3Fee) external onlyManagement {
-        require(_uniV3PoolForFee(_rewardToBaseUniV3Fee) != address(0), "!pool");
-        rewardToBaseUniV3Fee = _rewardToBaseUniV3Fee;
-        emit UniV3FeeSet(_rewardToBaseUniV3Fee);
+    function setPoolSetter(address _poolSetter, bool _allowed) external onlyManagement {
+        require(_poolSetter != address(0), "!pool setter");
+        poolSetters[_poolSetter] = _allowed;
+        emit PoolSetterSet(_poolSetter, _allowed);
     }
 
-    function setUniV4Pool(bytes32 _poolId, bool _groveIsToken0) external onlyManagement {
-        require(_poolId != bytes32(0), "!pool");
+    function setUniV4Pool(bytes32 _poolId) external onlyPoolSetter {
+        UniV4PoolConfig memory config = _resolvePoolConfig(_poolId);
         delete v4Pools;
-        v4Pools.push(UniV4PoolConfig({poolId: _poolId, groveIsToken0: _groveIsToken0}));
-        emit UniV4PoolSet(_poolId, _groveIsToken0);
+        v4Pools.push(config);
+        emit UniV4PoolSet(config.poolId, config.fee, config.tickSpacing);
     }
 
-    function setUniV4Pools(bytes32[] calldata _poolIds, bool[] calldata _groveIsToken0) external onlyManagement {
-        _setUniV4Pools(_poolIds, _groveIsToken0);
+    function setUniV4Pools(bytes32[] calldata _poolIds) external onlyPoolSetter {
+        uint256 length = _poolIds.length;
+        require(length > 0 && length <= MAX_V4_POOLS, "length");
+
+        delete v4Pools;
+        for (uint256 i; i < length; ++i) {
+            for (uint256 j; j < i; ++j) {
+                require(_poolIds[i] != _poolIds[j], "duplicate");
+            }
+            v4Pools.push(_resolvePoolConfig(_poolIds[i]));
+        }
+
+        emit UniV4PoolsSet(_poolIds);
     }
 
-    function addUniV4Pool(bytes32 _poolId, bool _groveIsToken0) external onlyManagement {
-        require(_poolId != bytes32(0), "!pool");
+    function addUniV4Pool(bytes32 _poolId) external onlyPoolSetter {
+        require(v4Pools.length < MAX_V4_POOLS, "max pools");
         require(!_hasUniV4Pool(_poolId), "duplicate");
 
-        v4Pools.push(UniV4PoolConfig({poolId: _poolId, groveIsToken0: _groveIsToken0}));
-        emit UniV4PoolAdded(_poolId, _groveIsToken0);
+        UniV4PoolConfig memory config = _resolvePoolConfig(_poolId);
+        v4Pools.push(config);
+        emit UniV4PoolAdded(config.poolId, config.fee, config.tickSpacing);
     }
 
-    function removeUniV4Pool(uint256 _index) external onlyManagement {
+    function removeUniV4Pool(uint256 _index) external onlyPoolSetter {
         uint256 length = v4Pools.length;
         require(length > 1, "!pool");
         require(_index < length, "!index");
@@ -171,223 +199,228 @@ contract GroveCompounderAprOracle {
         bytes32 removedPoolId = v4Pools[_index].poolId;
         v4Pools[_index] = v4Pools[length - 1];
         v4Pools.pop();
-
         emit UniV4PoolRemoved(removedPoolId);
-    }
-
-    function uniV3Pool() external view returns (address) {
-        return _uniV3Pool();
     }
 
     function uniV4PoolCount() external view returns (uint256) {
         return v4Pools.length;
     }
 
-    function uniV4Pool(uint256 _index) external view returns (bytes32 poolId, bool groveIsToken0) {
+    function uniV4Pool(uint256 _index) external view returns (bytes32 poolId, uint24 fee, int24 tickSpacing) {
         UniV4PoolConfig memory pool = v4Pools[_index];
-        return (pool.poolId, pool.groveIsToken0);
+        return (pool.poolId, pool.fee, pool.tickSpacing);
     }
 
-    function groveUsdcV4PoolId() external view returns (bytes32) {
-        return v4Pools[0].poolId;
-    }
-
-    function v4GroveIsToken0() external view returns (bool) {
-        return v4Pools[0].groveIsToken0;
-    }
-
-    function bestUniV4Pool() external view returns (bytes32 poolId, bool groveIsToken0, uint128 liquidity) {
-        (poolId, groveIsToken0, liquidity,) = _selectedV4Pool();
-    }
-
-    function selectedUniV4Pool()
+    function quoteUniV4Route()
         external
         view
-        returns (bytes32 poolId, bool groveIsToken0, uint128 liquidity, uint256 price)
+        returns (
+            uint256 totalAmountOut,
+            uint256 amountAllocated,
+            uint256 price,
+            bytes32[] memory poolIds,
+            uint256[] memory allocations,
+            uint256[] memory outputs
+        )
     {
-        return _selectedV4Pool();
+        RouteData memory route = _quoteV4Route();
+        totalAmountOut = route.totalAmountOut;
+        amountAllocated = route.amountAllocated;
+        if (amountAllocated == GROVE_PRICE_QUOTE_AMOUNT) {
+            price = FullMath.mulDiv(totalAmountOut, 1e30, GROVE_PRICE_QUOTE_AMOUNT);
+        }
+        return (totalAmountOut, amountAllocated, price, route.poolIds, route.allocations, route.outputs);
     }
 
     function _grovePrice() internal view returns (uint256) {
-        if (_v3PoolHasUsableLiquidity()) {
-            try UniswapV3SwapSimulator.simulateExactInputSingle(
-                ISwapRouter(UNISWAP_V3_ROUTER),
-                ISwapRouter.ExactInputSingleParams({
-                    tokenIn: GROVE,
-                    tokenOut: USDC,
-                    fee: rewardToBaseUniV3Fee,
-                    recipient: address(0),
-                    deadline: block.timestamp,
-                    amountIn: 1e18,
-                    amountOutMinimum: 0,
-                    sqrtPriceLimitX96: 0
-                })
-            ) returns (
-                uint256 output
-            ) {
-                if (output > 0) return output * 1e12;
-            } catch {}
+        RouteData memory route = _quoteV4Route();
+        require(route.amountAllocated == GROVE_PRICE_QUOTE_AMOUNT, "insufficient pool liquidity");
+        return FullMath.mulDiv(route.totalAmountOut, 1e30, GROVE_PRICE_QUOTE_AMOUNT);
+    }
+
+    function _quoteV4Route() internal view returns (RouteData memory route) {
+        uint256 poolCount = v4Pools.length;
+        route.poolIds = new bytes32[](poolCount);
+        route.allocations = new uint256[](poolCount);
+        route.outputs = new uint256[](poolCount);
+
+        (RoutingState memory routing, uint256[] memory firstChunkPrices, uint256 referenceCount) =
+            _initializeRouting(route);
+        if (referenceCount >= 3) {
+            uint256 medianPrice = _median(firstChunkPrices, referenceCount);
+            for (uint256 i; i < poolCount; ++i) {
+                if (routing.eligible[i] && !_withinPriceDeviation(_previewPrice(routing.previews[i]), medianPrice)) {
+                    routing.eligible[i] = false;
+                }
+            }
         }
 
-        (,,, uint256 price) = _selectedV4Pool();
-
-        if (price > 0) return price;
-
-        revert("insufficient pool liquidity");
+        _allocateChunks(route, routing);
     }
 
-    function _v3PoolHasUsableLiquidity() internal view returns (bool) {
-        address pool = _uniV3Pool();
-        if (pool == address(0)) return false;
-
-        return IUniswapV3Pool(pool).liquidity() >= MIN_REWARD_POOL_LIQUIDITY
-            && IERC20(USDC).balanceOf(pool) >= MIN_REWARD_POOL_USDC_BALANCE;
-    }
-
-    function _v4GrovePrice(uint160 sqrtPriceX96, bool groveIsToken0) internal pure returns (uint256) {
-        if (groveIsToken0) {
-            return _quoteToken1ForToken0(sqrtPriceX96, 1e18) * 1e12;
-        }
-
-        return _quoteToken0ForToken1(sqrtPriceX96, 1e18) * 1e12;
-    }
-
-    function _selectedV4Pool()
+    function _initializeRouting(RouteData memory route)
         internal
         view
-        returns (bytes32 poolId, bool groveIsToken0, uint128 liquidity, uint256 price)
+        returns (RoutingState memory routing, uint256[] memory firstChunkPrices, uint256 referenceCount)
     {
-        uint256 length = v4Pools.length;
-        UniV4PoolQuote[] memory quotes = new UniV4PoolQuote[](length);
-        uint256 quoteCount;
+        uint256 poolCount = v4Pools.length;
+        routing.states = new UniswapV4SwapSimulator.State[](poolCount);
+        routing.previews = new UniswapV4SwapSimulator.Preview[](poolCount);
+        routing.swapFees = new uint24[](poolCount);
+        routing.eligible = new bool[](poolCount);
+        firstChunkPrices = new uint256[](poolCount);
 
-        for (uint256 i; i < length; ++i) {
-            UniV4PoolConfig memory pool = v4Pools[i];
+        for (uint256 i; i < poolCount; ++i) {
+            UniV4PoolConfig memory config = v4Pools[i];
+            route.poolIds[i] = config.poolId;
 
-            try UNISWAP_V4_STATE_VIEW.getLiquidity(pool.poolId) returns (uint128 poolLiquidity) {
-                if (poolLiquidity < MIN_REWARD_POOL_LIQUIDITY) continue;
+            bool initialized;
+            (routing.states[i], routing.swapFees[i], initialized) =
+                UniswapV4SwapSimulator.loadState(UNISWAP_V4_STATE_VIEW, config.poolId, GROVE_TO_USDC_ZERO_FOR_ONE);
+            if (!initialized) continue;
 
-                try UNISWAP_V4_STATE_VIEW.getSlot0(pool.poolId) returns (
-                    uint160 poolSqrtPriceX96, int24, uint24, uint24
+            routing.previews[i] =
+                _previewChunk(config, routing.swapFees[i], routing.states[i], GROVE_PRICE_CHUNK_AMOUNT);
+            if (!routing.previews[i].valid || routing.previews[i].amountIn == 0 || routing.previews[i].amountOut == 0) {
+                continue;
+            }
+
+            routing.eligible[i] = true;
+            if (routing.previews[i].fullyFilled) {
+                firstChunkPrices[referenceCount++] = _previewPrice(routing.previews[i]);
+            }
+        }
+    }
+
+    function _allocateChunks(RouteData memory route, RoutingState memory routing) internal view {
+        uint256 poolCount = v4Pools.length;
+        for (uint256 iteration; iteration < GROVE_PRICE_CHUNK_COUNT + poolCount; ++iteration) {
+            uint256 remaining = GROVE_PRICE_QUOTE_AMOUNT - route.amountAllocated;
+            if (remaining == 0) return;
+            uint256 requested = remaining < GROVE_PRICE_CHUNK_AMOUNT ? remaining : GROVE_PRICE_CHUNK_AMOUNT;
+
+            if (requested != GROVE_PRICE_CHUNK_AMOUNT) {
+                for (uint256 i; i < poolCount; ++i) {
+                    if (!routing.eligible[i]) continue;
+                    routing.previews[i] = _previewChunk(v4Pools[i], routing.swapFees[i], routing.states[i], requested);
+                    if (
+                        !routing.previews[i].valid || routing.previews[i].amountIn == 0
+                            || routing.previews[i].amountOut == 0
+                    ) routing.eligible[i] = false;
+                }
+            }
+
+            uint256 bestIndex = type(uint256).max;
+            for (uint256 i; i < poolCount; ++i) {
+                if (!routing.eligible[i]) continue;
+                if (
+                    bestIndex == type(uint256).max
+                        || _previewPrice(routing.previews[i]) > _previewPrice(routing.previews[bestIndex])
                 ) {
-                    if (poolSqrtPriceX96 == 0) continue;
-
-                    uint256 poolPrice = _v4GrovePrice(poolSqrtPriceX96, pool.groveIsToken0);
-                    if (poolPrice == 0) continue;
-
-                    quotes[quoteCount++] = UniV4PoolQuote({
-                        poolId: pool.poolId,
-                        groveIsToken0: pool.groveIsToken0,
-                        liquidity: poolLiquidity,
-                        price: poolPrice
-                    });
-                } catch {}
-            } catch {}
-        }
-
-        if (quoteCount == 0) return (bytes32(0), false, 0, 0);
-
-        uint256 medianPrice = _medianPrice(quotes, quoteCount);
-        uint256 selectedIndex = type(uint256).max;
-
-        for (uint256 i; i < quoteCount; ++i) {
-            if (!_withinV4PriceDeviation(quotes[i].price, medianPrice)) continue;
-
-            if (selectedIndex == type(uint256).max || quotes[i].liquidity > quotes[selectedIndex].liquidity) {
-                selectedIndex = i;
+                    bestIndex = i;
+                }
             }
-        }
+            if (bestIndex == type(uint256).max) return;
 
-        if (selectedIndex == type(uint256).max) return (bytes32(0), false, 0, 0);
+            uint256 amountOut = routing.previews[bestIndex].amountOut;
+            uint256 amountIn = routing.previews[bestIndex].amountIn;
+            routing.states[bestIndex] = routing.previews[bestIndex].state;
+            route.allocations[bestIndex] += amountIn;
+            route.outputs[bestIndex] += amountOut;
+            route.amountAllocated += amountIn;
+            route.totalAmountOut += amountOut;
 
-        UniV4PoolQuote memory selected = quotes[selectedIndex];
-        return (selected.poolId, selected.groveIsToken0, selected.liquidity, selected.price);
-    }
-
-    function _medianPrice(UniV4PoolQuote[] memory quotes, uint256 quoteCount) internal pure returns (uint256) {
-        uint256[] memory prices = new uint256[](quoteCount);
-
-        for (uint256 i; i < quoteCount; ++i) {
-            prices[i] = quotes[i].price;
-        }
-
-        for (uint256 i = 1; i < quoteCount; ++i) {
-            uint256 price = prices[i];
-            uint256 j = i;
-
-            while (j > 0 && prices[j - 1] > price) {
-                prices[j] = prices[j - 1];
-                --j;
+            if (route.amountAllocated == GROVE_PRICE_QUOTE_AMOUNT) return;
+            if (!routing.previews[bestIndex].fullyFilled) {
+                routing.eligible[bestIndex] = false;
+                continue;
             }
 
-            prices[j] = price;
-        }
-
-        uint256 mid = quoteCount / 2;
-        if (quoteCount % 2 == 1) return prices[mid];
-
-        uint256 lower = prices[mid - 1];
-        return lower + ((prices[mid] - lower) / 2);
-    }
-
-    function _withinV4PriceDeviation(uint256 price, uint256 referencePrice) internal pure returns (bool) {
-        uint256 deviation = price > referencePrice ? price - referencePrice : referencePrice - price;
-        return deviation <= FullMath.mulDiv(referencePrice, MAX_V4_POOL_PRICE_DEVIATION_BPS, MAX_BPS);
-    }
-
-    function _setUniV4Pools(bytes32[] calldata _poolIds, bool[] calldata _groveIsToken0) internal {
-        uint256 length = _poolIds.length;
-        require(length > 0 && length == _groveIsToken0.length, "length");
-
-        delete v4Pools;
-        for (uint256 i; i < length; ++i) {
-            bytes32 poolId = _poolIds[i];
-            require(poolId != bytes32(0), "!pool");
-
-            for (uint256 j; j < i; ++j) {
-                require(poolId != _poolIds[j], "duplicate");
+            UniV4PoolConfig memory config = v4Pools[bestIndex];
+            routing.previews[bestIndex] =
+                _previewChunk(config, routing.swapFees[bestIndex], routing.states[bestIndex], GROVE_PRICE_CHUNK_AMOUNT);
+            if (
+                !routing.previews[bestIndex].valid || routing.previews[bestIndex].amountIn == 0
+                    || routing.previews[bestIndex].amountOut == 0
+            ) {
+                routing.eligible[bestIndex] = false;
             }
-
-            v4Pools.push(UniV4PoolConfig({poolId: poolId, groveIsToken0: _groveIsToken0[i]}));
         }
+    }
 
-        emit UniV4PoolsSet(_poolIds, _groveIsToken0);
+    function _previewChunk(
+        UniV4PoolConfig memory config,
+        uint24 swapFee,
+        UniswapV4SwapSimulator.State memory state,
+        uint256 amountIn
+    ) internal view returns (UniswapV4SwapSimulator.Preview memory) {
+        return UniswapV4SwapSimulator.previewExactInput(
+            UNISWAP_V4_STATE_VIEW,
+            config.poolId,
+            config.tickSpacing,
+            GROVE_TO_USDC_ZERO_FOR_ONE,
+            amountIn,
+            swapFee,
+            state
+        );
+    }
+
+    function _previewPrice(UniswapV4SwapSimulator.Preview memory preview) internal pure returns (uint256) {
+        return FullMath.mulDiv(preview.amountOut, 1e18, preview.amountIn);
+    }
+
+    function _resolvePoolConfig(bytes32 _poolId) internal view returns (UniV4PoolConfig memory config) {
+        require(_poolId != bytes32(0), "!pool");
+
+        IUniswapV4PositionManager.PoolKeyData memory key = UNISWAP_V4_POSITION_MANAGER.poolKeys(bytes25(_poolId));
+        require(key.currency0 == USDC && key.currency1 == GROVE, "!currencies");
+        require(key.hooks == address(0), "!hooks");
+        require(key.tickSpacing > 0, "!tick spacing");
+
+        PoolKey memory poolKey = PoolKey({
+            currency0: Currency.wrap(key.currency0),
+            currency1: Currency.wrap(key.currency1),
+            fee: key.fee,
+            tickSpacing: key.tickSpacing,
+            hooks: IHooks(key.hooks)
+        });
+        require(PoolId.unwrap(poolKey.toId()) == _poolId, "!pool id");
+
+        (uint160 sqrtPriceX96,,,) = UNISWAP_V4_STATE_VIEW.getSlot0(_poolId);
+        require(sqrtPriceX96 != 0, "!initialized");
+        return UniV4PoolConfig({poolId: _poolId, fee: key.fee, tickSpacing: key.tickSpacing});
+    }
+
+    function _pushUniV4Pool(bytes32 _poolId) internal {
+        v4Pools.push(_resolvePoolConfig(_poolId));
     }
 
     function _hasUniV4Pool(bytes32 _poolId) internal view returns (bool) {
-        uint256 length = v4Pools.length;
-        for (uint256 i; i < length; ++i) {
+        for (uint256 i; i < v4Pools.length; ++i) {
             if (v4Pools[i].poolId == _poolId) return true;
         }
-
         return false;
     }
 
-    function _uniV3Pool() internal view returns (address) {
-        return _uniV3PoolForFee(rewardToBaseUniV3Fee);
-    }
-
-    function _uniV3PoolForFee(uint24 _fee) internal view returns (address) {
-        return IUniswapV3Factory(ISwapRouterWithFactory(UNISWAP_V3_ROUTER).factory()).getPool(GROVE, USDC, _fee);
-    }
-
-    function _quoteToken1ForToken0(uint160 sqrtPriceX96, uint256 baseAmount) internal pure returns (uint256) {
-        if (sqrtPriceX96 <= type(uint128).max) {
-            uint256 ratioX192 = uint256(sqrtPriceX96) * sqrtPriceX96;
-            return FullMath.mulDiv(ratioX192, baseAmount, Q192);
+    function _median(uint256[] memory values, uint256 count) internal pure returns (uint256) {
+        for (uint256 i = 1; i < count; ++i) {
+            uint256 value = values[i];
+            uint256 j = i;
+            while (j > 0 && values[j - 1] > value) {
+                values[j] = values[j - 1];
+                --j;
+            }
+            values[j] = value;
         }
 
-        uint256 ratioX128 = FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, 1 << 64);
-        return FullMath.mulDiv(ratioX128, baseAmount, 1 << 128);
+        uint256 mid = count / 2;
+        if (count % 2 == 1) return values[mid];
+        uint256 lower = values[mid - 1];
+        return lower + ((values[mid] - lower) / 2);
     }
 
-    function _quoteToken0ForToken1(uint160 sqrtPriceX96, uint256 baseAmount) internal pure returns (uint256) {
-        if (sqrtPriceX96 <= type(uint128).max) {
-            uint256 ratioX192 = uint256(sqrtPriceX96) * sqrtPriceX96;
-            return FullMath.mulDiv(Q192, baseAmount, ratioX192);
-        }
-
-        uint256 ratioX128 = FullMath.mulDiv(sqrtPriceX96, sqrtPriceX96, 1 << 64);
-        return FullMath.mulDiv(1 << 128, baseAmount, ratioX128);
+    function _withinPriceDeviation(uint256 price, uint256 referencePrice) internal pure returns (bool) {
+        uint256 deviation = price > referencePrice ? price - referencePrice : referencePrice - price;
+        return deviation <= FullMath.mulDiv(referencePrice, MAX_V4_POOL_PRICE_DEVIATION_BPS, MAX_BPS);
     }
 }
