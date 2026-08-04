@@ -1,0 +1,104 @@
+=== Toolchain ===
+foundry
+=== Source (with line counts) ===
+     237 src/GroveCompounder.sol
+      15 src/interfaces/IOracle.sol
+      12 src/interfaces/IPsmWrapper.sol
+      32 src/interfaces/IStaking.sol
+      44 src/interfaces/IStrategyInterface.sol
+      11 src/interfaces/IUniswapV4StateView.sol
+      62 src/libraries/UniswapV3SwapSimulator.sol
+     256 src/libraries/UniswapV3SwapSimulatorCore.sol
+     393 src/periphery/GroveCompounderAprOracle.sol
+    1062 total
+=== nSLOC ===
+src/GroveCompounder.sol: 142
+src/interfaces/IOracle.sol: 13
+src/interfaces/IPsmWrapper.sol: 7
+src/interfaces/IStaking.sol: 17
+src/interfaces/IStrategyInterface.sol: 23
+src/interfaces/IUniswapV4StateView.sol: 8
+src/libraries/UniswapV3SwapSimulator.sol: 49
+src/libraries/UniswapV3SwapSimulatorCore.sol: 192
+src/periphery/GroveCompounderAprOracle.sol: 286
+TOTAL: 737
+=== NatSpec ===
+      14
+=== test_files ===
+       5
+=== test_functions ===
+26
+=== stateless_fuzz ===
+0
+=== foundry_invariant ===
+0
+=== echidna ===
+0:       0
+=== medusa ===
+0:       0
+=== hardhat_fuzz ===
+0
+0
+=== fork ===
+0
+=== certora ===
+       0:       0
+=== halmos ===
+0:       0
+=== hevm ===
+0
+=== docs ===
+README.md
+README.md
+=== commit ===
+f8f796d
+=== git_unique_authors ===
+       1
+=== git_contributors ===
+  21 dudesahn
+=== git_source_contributors ===
+3179	891	dudesahn
+=== git_repo_age ===
+2025-07-03T18:44:45-04:00
+2026-07-08T18:22:37-04:00
+=== git_total_commits ===
+21
+=== git_merge_count ===
+       0
+=== git_hotspots ===
+  12 src/test/utils/Setup.sol
+  10 src/test/Operation.t.sol
+   8 src/test/Oracle.t.sol
+   7 src/interfaces/IStrategyInterface.sol
+   6 src/Strategy.sol
+   6 src/GroveCompounder.sol
+   5 src/periphery/SparkCompounderAprOracle.sol
+   4 src/periphery/GroveCompounderAprOracle.sol
+   3 src/test/FunctionSignature.t.sol
+   3 src/periphery/StrategyAprOracle.sol
+   3 src/libraries/UniswapV3SwapSimulatorCore.sol
+   3 src/interfaces/IStaking.sol
+   3 src/interfaces/IPsmWrapper.sol
+   2 src/test/Shutdown.t.sol
+   2 src/libraries/UniswapV3SwapSimulator.sol
+=== git_recent_30d ===
+f8f796d refactor: use base healthcheck open setter
+334030f fix: harden grove reward pricing
+872efb4 feat: make grove oracle pools configurable
+8f6a7bb chore: update yearn strategy libs
+087c8aa fix: guard grove psm swaps
+94b7b58 feat: add grove v4 oracle fallback
+2b20055 feat: port compounder to grove
+dded1b2 test: stabilize forked reward tests
+e2f8b23 fix: return zero apr after rewards end
+=== git_large_diffs ===
+968 COMMIT:9fde0cc dudesahn Initial commit
+967 COMMIT:dbd6a0e dudesahn feat: spark compounder
+680 COMMIT:334030f dudesahn fix: harden grove reward pricing
+414 COMMIT:3f4ef47 dudesahn refactor: minor updates
+284 COMMIT:2b20055 dudesahn feat: port compounder to grove
+258 COMMIT:872efb4 dudesahn feat: make grove oracle pools configurable
+127 COMMIT:94b7b58 dudesahn feat: add grove v4 oracle fallback
+66 COMMIT:dded1b2 dudesahn test: stabilize forked reward tests
+66 COMMIT:8f6a7bb dudesahn chore: update yearn strategy libs
+63 COMMIT:aac76c1 dudesahn feat: review comments
