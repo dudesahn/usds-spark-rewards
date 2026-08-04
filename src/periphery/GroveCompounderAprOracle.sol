@@ -25,12 +25,32 @@ interface IUniswapV4PositionManager {
 contract GroveCompounderAprOracle {
     using PoolIdLibrary for PoolKey;
 
+    error AprTooHigh();
+    error DuplicatePool();
+    error HookedPool();
+    error InsufficientPoolLiquidity();
+    error InvalidCurrencies();
+    error InvalidIndex();
+    error InvalidManagement();
+    error InvalidPool();
+    error InvalidPoolCount();
+    error InvalidPoolId();
+    error InvalidPoolSetter();
+    error InvalidTickSpacing();
+    error MaxPools();
+    error UnauthorizedManagement();
+    error UnauthorizedPoolSetter();
+    error UninitializedPool();
+
     event ManagementTransferred(address indexed management);
-    event UniV4PoolSet(bytes32 indexed poolId, uint24 fee, int24 tickSpacing);
     event UniV4PoolAdded(bytes32 indexed poolId, uint24 fee, int24 tickSpacing);
     event UniV4PoolRemoved(bytes32 indexed poolId);
     event UniV4PoolsSet(bytes32[] poolIds);
     event PoolSetterSet(address indexed poolSetter, bool allowed);
+    event CachedGrovePriceUpdated(uint256 previousPrice, uint256 newPrice, uint256 timestamp);
+    event CachedGrovePriceVerified(uint256 cachedPrice, uint256 livePrice, uint256 timestamp);
+    event GrovePriceConfirmationPending(uint256 price, uint256 timestamp);
+    event GrovePriceConfirmationCleared();
 
     struct UniV4PoolConfig {
         bytes32 poolId;
@@ -59,9 +79,6 @@ contract GroveCompounderAprOracle {
     /// @notice Grove governance token and staking reward token
     address public constant GROVE = 0xB30FE1Cf884B48a22a50D22a9282004F2c5E9406;
 
-    /// @notice Token staked to earn GROVE rewards
-    address public constant USDS = 0xdC035D45d973E3EC169d2276DDab16f1e407384F;
-
     /// @notice GROVE quote token
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
@@ -70,35 +87,34 @@ contract GroveCompounderAprOracle {
     IUniswapV4PositionManager public constant UNISWAP_V4_POSITION_MANAGER =
         IUniswapV4PositionManager(0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9e);
 
-    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID =
-        0x2897b6ccd757711791a90b723df4f89567568859d040ff97d25cc4a5cb93ea03;
-    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_TWO =
-        0x9fe7fb249f5fdacc3c102cb8f9c5e5b59b70da2ea96377804bcb58328b93441f;
-    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_THREE =
-        0xb557b2447a4723741959fe7ebd5a37375023931d19f6383cc83bd0d9c8397bb9;
-    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_FOUR =
-        0x2e53ef1a957f41bfba562bac317881d6f0ef2d6c217c7279c11b0878f9791ad5;
-    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_FIVE_PERCENT =
-        0xaa0b1a90c6188f42c3603998536418f4eeedccf20b999377dab7e4c6aafc5286;
-    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_VOLUME =
-        0x20d117a32203158c46d0dce34ade2b2cbf846d151e9cea406e0463fe361d82ce;
-    bytes32 public constant DEFAULT_GROVE_USDC_V4_POOL_ID_KYBER =
-        0x0d40eef4d9600a37016f34d089705e83d8d9e40ac80838abb04a278fa049e874;
-
     uint256 internal constant SECONDS_PER_YEAR = 31_536_000;
     uint256 internal constant MAX_BPS = 10_000;
     bool internal constant GROVE_TO_USDC_ZERO_FOR_ONE = false;
 
     uint256 public constant GROVE_PRICE_QUOTE_AMOUNT = 10_000e18;
     uint256 public constant GROVE_PRICE_CHUNK_AMOUNT = 1_000e18;
-    uint256 public constant GROVE_PRICE_CHUNK_COUNT = 10;
+    uint256 internal constant GROVE_PRICE_CHUNK_COUNT = 10;
     uint256 public constant MAX_V4_POOLS = 10;
-    uint256 public constant MAX_V4_POOL_PRICE_DEVIATION_BPS = 1_000;
+    uint256 internal constant MAX_V4_POOL_PRICE_DEVIATION_BPS = 1_000;
     uint256 public constant MAX_EXPECTED_APR = 5e17;
+
+    uint256 public constant CACHE_UPDATE_THRESHOLD_BPS = 500;
+    uint256 public constant LARGE_PRICE_MOVE_BPS = 1_000;
+    uint256 public constant CACHE_HEARTBEAT = 12 hours;
+    uint256 public constant CACHE_FULL_PRICE_AGE = 24 hours;
+    uint256 public constant CACHE_MAX_AGE = 48 hours;
+    uint256 public constant STALE_CACHE_PRICE_BPS = 9_000;
+    uint256 public constant PRICE_CONFIRMATION_DELAY = 30 minutes;
+    uint256 public constant PRICE_CONFIRMATION_WINDOW = 6 hours;
 
     address public management;
     mapping(address => bool) public poolSetters;
     UniV4PoolConfig[] internal v4Pools;
+
+    uint256 public cachedGrovePrice;
+    uint256 public pendingGrovePrice;
+    uint64 public lastPriceVerification;
+    uint64 public pendingPriceTimestamp;
 
     modifier onlyManagement() {
         _onlyManagement();
@@ -111,20 +127,15 @@ contract GroveCompounderAprOracle {
     }
 
     function _onlyManagement() internal view {
-        require(msg.sender == management, "!management");
+        if (msg.sender != management) revert UnauthorizedManagement();
     }
 
     function _onlyPoolSetter() internal view {
-        require(msg.sender == management || poolSetters[msg.sender], "!pool setter");
+        if (msg.sender != management && !poolSetters[msg.sender]) revert UnauthorizedPoolSetter();
     }
 
     constructor() {
         management = msg.sender;
-        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID_FIVE_PERCENT);
-        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID);
-        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID_TWO);
-        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID_VOLUME);
-        _pushUniV4Pool(DEFAULT_GROVE_USDC_V4_POOL_ID_KYBER);
         emit ManagementTransferred(msg.sender);
     }
 
@@ -134,47 +145,107 @@ contract GroveCompounderAprOracle {
      * @return oracleApr Expected APR represented as 1e18.
      */
     function aprAfterDebtChange(address, int256 _delta) external view returns (uint256 oracleApr) {
+        if (block.timestamp >= IStaking(STAKING).periodFinish()) return 0;
+
         uint256 assets = IStaking(STAKING).totalSupply();
         uint256 rewardRate = IStaking(STAKING).rewardRate();
-
-        if (block.timestamp > IStaking(STAKING).periodFinish()) return 0;
-
         uint256 price = _grovePrice();
-        assets = _delta < 0 ? assets - uint256(-_delta) : assets + uint256(_delta);
-
-        if (assets == 0) revert("apr too high");
+        if (_delta < 0) {
+            if (_delta == type(int256).min) revert AprTooHigh();
+            // Negation is safe after excluding int256.min, and the result is nonnegative.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            uint256 decrease = uint256(-_delta);
+            if (decrease >= assets) revert AprTooHigh();
+            assets -= decrease;
+        } else {
+            // The branch proves that _delta is nonnegative.
+            // forge-lint: disable-next-line(unsafe-typecast)
+            assets += uint256(_delta);
+        }
 
         oracleApr = (rewardRate * SECONDS_PER_YEAR * price) / assets;
-        require(oracleApr <= MAX_EXPECTED_APR, "apr too high");
+        if (oracleApr > MAX_EXPECTED_APR) revert AprTooHigh();
     }
 
     function setManagement(address _management) external onlyManagement {
-        require(_management != address(0), "!management");
+        if (_management == address(0)) revert InvalidManagement();
         management = _management;
         emit ManagementTransferred(_management);
     }
 
     function setPoolSetter(address _poolSetter, bool _allowed) external onlyManagement {
-        require(_poolSetter != address(0), "!pool setter");
+        if (_poolSetter == address(0)) revert InvalidPoolSetter();
         poolSetters[_poolSetter] = _allowed;
         emit PoolSetterSet(_poolSetter, _allowed);
     }
 
-    function setUniV4Pool(bytes32 _poolId) external onlyPoolSetter {
-        UniV4PoolConfig memory config = _resolvePoolConfig(_poolId);
-        delete v4Pools;
-        v4Pools.push(config);
-        emit UniV4PoolSet(config.poolId, config.fee, config.tickSpacing);
+    /**
+     * @notice Verify the cached GROVE price against the currently executable V4 route.
+     * @dev Prices moving by 5% to 10% are updated immediately. Moves above 10%
+     *      must be observed twice, at least 30 minutes apart and no more than
+     *      6 hours apart, with the observations agreeing within 5%.
+     * @return livePrice The current fully executable 10,000 GROVE quote.
+     * @return priceUpdated Whether the active cached price was updated.
+     * @return confirmationPending Whether a large move still needs confirmation.
+     */
+    function refreshCachedGrovePrice()
+        external
+        onlyPoolSetter
+        returns (uint256 livePrice, bool priceUpdated, bool confirmationPending)
+    {
+        (bool valid, uint256 price) = _tryGrovePrice();
+        if (!valid) revert InsufficientPoolLiquidity();
+        livePrice = price;
+
+        uint256 cachedPrice = cachedGrovePrice;
+        if (cachedPrice == 0) {
+            _updateCachedGrovePrice(livePrice);
+            return (livePrice, true, false);
+        }
+
+        uint256 deviationBps = _priceDeviationBps(livePrice, cachedPrice);
+        if (deviationBps > LARGE_PRICE_MOVE_BPS) {
+            (priceUpdated, confirmationPending) = _handleLargePriceMove(livePrice);
+            return (livePrice, priceUpdated, confirmationPending);
+        }
+
+        _clearPendingPrice();
+        if (deviationBps >= CACHE_UPDATE_THRESHOLD_BPS) {
+            _updateCachedGrovePrice(livePrice);
+            return (livePrice, true, false);
+        }
+
+        if (block.timestamp >= uint256(lastPriceVerification) + CACHE_HEARTBEAT) {
+            lastPriceVerification = uint64(block.timestamp);
+            emit CachedGrovePriceVerified(cachedPrice, livePrice, block.timestamp);
+        }
+
+        return (livePrice, false, false);
+    }
+
+    /**
+     * @notice Return the cached price after applying the configured stale-price policy.
+     * @return price The full cached price through 24 hours, 90% through 48 hours,
+     *         and zero beyond 48 hours.
+     */
+    function effectiveCachedGrovePrice() public view returns (uint256 price) {
+        uint256 verifiedAt = lastPriceVerification;
+        if (verifiedAt == 0 || cachedGrovePrice == 0) return 0;
+
+        uint256 age = block.timestamp - verifiedAt;
+        if (age <= CACHE_FULL_PRICE_AGE) return cachedGrovePrice;
+        if (age <= CACHE_MAX_AGE) return FullMath.mulDiv(cachedGrovePrice, STALE_CACHE_PRICE_BPS, MAX_BPS);
+        return 0;
     }
 
     function setUniV4Pools(bytes32[] calldata _poolIds) external onlyPoolSetter {
         uint256 length = _poolIds.length;
-        require(length > 0 && length <= MAX_V4_POOLS, "length");
+        if (length == 0 || length > MAX_V4_POOLS) revert InvalidPoolCount();
 
         delete v4Pools;
         for (uint256 i; i < length; ++i) {
             for (uint256 j; j < i; ++j) {
-                require(_poolIds[i] != _poolIds[j], "duplicate");
+                if (_poolIds[i] == _poolIds[j]) revert DuplicatePool();
             }
             v4Pools.push(_resolvePoolConfig(_poolIds[i]));
         }
@@ -183,8 +254,8 @@ contract GroveCompounderAprOracle {
     }
 
     function addUniV4Pool(bytes32 _poolId) external onlyPoolSetter {
-        require(v4Pools.length < MAX_V4_POOLS, "max pools");
-        require(!_hasUniV4Pool(_poolId), "duplicate");
+        if (v4Pools.length >= MAX_V4_POOLS) revert MaxPools();
+        if (_hasUniV4Pool(_poolId)) revert DuplicatePool();
 
         UniV4PoolConfig memory config = _resolvePoolConfig(_poolId);
         v4Pools.push(config);
@@ -193,8 +264,8 @@ contract GroveCompounderAprOracle {
 
     function removeUniV4Pool(uint256 _index) external onlyPoolSetter {
         uint256 length = v4Pools.length;
-        require(length > 1, "!pool");
-        require(_index < length, "!index");
+        if (length <= 1) revert InvalidPoolCount();
+        if (_index >= length) revert InvalidIndex();
 
         bytes32 removedPoolId = v4Pools[_index].poolId;
         v4Pools[_index] = v4Pools[length - 1];
@@ -233,9 +304,58 @@ contract GroveCompounderAprOracle {
     }
 
     function _grovePrice() internal view returns (uint256) {
+        (bool valid, uint256 price) = _tryGrovePrice();
+        if (valid) return price;
+        return effectiveCachedGrovePrice();
+    }
+
+    function _tryGrovePrice() internal view returns (bool valid, uint256 price) {
         RouteData memory route = _quoteV4Route();
-        require(route.amountAllocated == GROVE_PRICE_QUOTE_AMOUNT, "insufficient pool liquidity");
-        return FullMath.mulDiv(route.totalAmountOut, 1e30, GROVE_PRICE_QUOTE_AMOUNT);
+        if (route.amountAllocated != GROVE_PRICE_QUOTE_AMOUNT) return (false, 0);
+        return (true, FullMath.mulDiv(route.totalAmountOut, 1e30, GROVE_PRICE_QUOTE_AMOUNT));
+    }
+
+    function _handleLargePriceMove(uint256 livePrice) internal returns (bool priceUpdated, bool confirmationPending) {
+        uint256 pendingPrice = pendingGrovePrice;
+        uint256 pendingAt = pendingPriceTimestamp;
+
+        if (pendingPrice != 0 && pendingAt != 0) {
+            uint256 pendingAge = block.timestamp - pendingAt;
+            bool observationsAgree = _priceDeviationBps(livePrice, pendingPrice) <= CACHE_UPDATE_THRESHOLD_BPS;
+
+            if (observationsAgree && pendingAge >= PRICE_CONFIRMATION_DELAY && pendingAge <= PRICE_CONFIRMATION_WINDOW)
+            {
+                _updateCachedGrovePrice(livePrice);
+                return (true, false);
+            }
+
+            if (observationsAgree && pendingAge <= PRICE_CONFIRMATION_WINDOW) return (false, true);
+        }
+
+        pendingGrovePrice = livePrice;
+        pendingPriceTimestamp = uint64(block.timestamp);
+        emit GrovePriceConfirmationPending(livePrice, block.timestamp);
+        return (false, true);
+    }
+
+    function _updateCachedGrovePrice(uint256 livePrice) internal {
+        uint256 previousPrice = cachedGrovePrice;
+        cachedGrovePrice = livePrice;
+        lastPriceVerification = uint64(block.timestamp);
+        _clearPendingPrice();
+        emit CachedGrovePriceUpdated(previousPrice, livePrice, block.timestamp);
+    }
+
+    function _clearPendingPrice() internal {
+        if (pendingGrovePrice == 0 && pendingPriceTimestamp == 0) return;
+        pendingGrovePrice = 0;
+        pendingPriceTimestamp = 0;
+        emit GrovePriceConfirmationCleared();
+    }
+
+    function _priceDeviationBps(uint256 price, uint256 referencePrice) internal pure returns (uint256) {
+        uint256 deviation = price > referencePrice ? price - referencePrice : referencePrice - price;
+        return FullMath.mulDiv(deviation, MAX_BPS, referencePrice);
     }
 
     function _quoteV4Route() internal view returns (RouteData memory route) {
@@ -370,12 +490,14 @@ contract GroveCompounderAprOracle {
     }
 
     function _resolvePoolConfig(bytes32 _poolId) internal view returns (UniV4PoolConfig memory config) {
-        require(_poolId != bytes32(0), "!pool");
+        if (_poolId == bytes32(0)) revert InvalidPool();
 
+        // PositionManager indexes pool keys by the leading 25 bytes of the canonical pool ID.
+        // forge-lint: disable-next-line(unsafe-typecast)
         IUniswapV4PositionManager.PoolKeyData memory key = UNISWAP_V4_POSITION_MANAGER.poolKeys(bytes25(_poolId));
-        require(key.currency0 == USDC && key.currency1 == GROVE, "!currencies");
-        require(key.hooks == address(0), "!hooks");
-        require(key.tickSpacing > 0, "!tick spacing");
+        if (key.currency0 != USDC || key.currency1 != GROVE) revert InvalidCurrencies();
+        if (key.hooks != address(0)) revert HookedPool();
+        if (key.tickSpacing <= 0) revert InvalidTickSpacing();
 
         PoolKey memory poolKey = PoolKey({
             currency0: Currency.wrap(key.currency0),
@@ -384,15 +506,11 @@ contract GroveCompounderAprOracle {
             tickSpacing: key.tickSpacing,
             hooks: IHooks(key.hooks)
         });
-        require(PoolId.unwrap(poolKey.toId()) == _poolId, "!pool id");
+        if (PoolId.unwrap(poolKey.toId()) != _poolId) revert InvalidPoolId();
 
         (uint160 sqrtPriceX96,,,) = UNISWAP_V4_STATE_VIEW.getSlot0(_poolId);
-        require(sqrtPriceX96 != 0, "!initialized");
+        if (sqrtPriceX96 == 0) revert UninitializedPool();
         return UniV4PoolConfig({poolId: _poolId, fee: key.fee, tickSpacing: key.tickSpacing});
-    }
-
-    function _pushUniV4Pool(bytes32 _poolId) internal {
-        v4Pools.push(_resolvePoolConfig(_poolId));
     }
 
     function _hasUniV4Pool(bytes32 _poolId) internal view returns (bool) {

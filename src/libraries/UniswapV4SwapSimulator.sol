@@ -67,6 +67,8 @@ library UniswapV4SwapSimulator {
     ) internal view returns (Preview memory preview) {
         if (amountIn == 0 || amountIn > uint256(type(int256).max)) return preview;
 
+        // The upper bound above makes this conversion lossless.
+        // forge-lint: disable-next-line(unsafe-typecast)
         int256 amountSpecifiedRemaining = -int256(amountIn);
         uint160 sqrtPriceLimitX96 = zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1;
 
@@ -115,6 +117,18 @@ library UniswapV4SwapSimulator {
                 return _finishPartial(preview, state, amountIn, amountSpecifiedRemaining);
             }
         }
+
+        // The amount can be fully consumed by the final permitted step. Finalize
+        // here because the loop's leading completion check will not run again.
+        if (amountSpecifiedRemaining == 0) {
+            preview.state = state;
+            preview.amountIn = amountIn;
+            preview.valid = true;
+            preview.fullyFilled = true;
+            return preview;
+        }
+
+        return _finishPartial(preview, state, amountIn, amountSpecifiedRemaining);
     }
 
     function _finishPartial(Preview memory preview, State memory state, uint256 requested, int256 remaining)
@@ -123,6 +137,8 @@ library UniswapV4SwapSimulator {
         returns (Preview memory)
     {
         preview.state = state;
+        // Exact-input remaining amounts stay nonpositive throughout the simulation.
+        // forge-lint: disable-next-line(unsafe-typecast)
         preview.amountIn = requested - uint256(-remaining);
         preview.valid = true;
         return preview;
@@ -149,7 +165,7 @@ library UniswapV4SwapSimulator {
                     : (compressed - int24(uint24(bitPosition))) * tickSpacing;
             } else {
                 (int16 wordPosition, uint8 bitPosition) = _position(++compressed);
-                uint256 mask = ~((1 << bitPosition) - 1);
+                uint256 mask = ~((uint256(1) << bitPosition) - 1);
                 uint256 masked = stateView.getTickBitmap(poolId, wordPosition) & mask;
 
                 initialized = masked != 0;
@@ -166,7 +182,11 @@ library UniswapV4SwapSimulator {
     }
 
     function _position(int24 tick) private pure returns (int16 wordPosition, uint8 bitPosition) {
+        // A valid Uniswap tick is bounded tightly enough for its bitmap word index.
+        // forge-lint: disable-next-line(unsafe-typecast)
         wordPosition = int16(tick >> 8);
+        // Modulo 256 defines the bitmap position and intentionally wraps negative remainders.
+        // forge-lint: disable-next-line(unsafe-typecast)
         bitPosition = uint8(int8(tick % 256));
     }
 }
