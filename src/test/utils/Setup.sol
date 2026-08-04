@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import "forge-std/console2.sol";
+import {console2} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {GroveCompounder, ERC20, Auction, IStaking} from "src/GroveCompounder.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
-import {IUniswapV4StateView} from "src/interfaces/IUniswapV4StateView.sol";
-import {AuctionFactory} from "@periphery/Auctions/AuctionFactory.sol";
-import {IUniswapV3Pool} from "@uniswap-v3-core/interfaces/IUniswapV3Pool.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -16,25 +13,15 @@ import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
 interface IFactory {
     function governance() external view returns (address);
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function set_protocol_fee_bps(uint16) external;
 
+    // forge-lint: disable-next-line(mixed-case-function)
     function set_protocol_fee_recipient(address) external;
 }
 
 contract Setup is Test, IEvents {
-    address public constant GROVE_USDC_V3_POOL = 0x5D23797587B2c17414384384098291c0B1Fe1362;
-    IUniswapV4StateView public constant UNISWAP_V4_STATE_VIEW =
-        IUniswapV4StateView(0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227);
-    bytes32 public constant GROVE_USDC_V4_POOL_ID = 0x2897b6ccd757711791a90b723df4f89567568859d040ff97d25cc4a5cb93ea03;
-    bytes32 public constant GROVE_USDC_V4_POOL_ID_TWO =
-        0x9fe7fb249f5fdacc3c102cb8f9c5e5b59b70da2ea96377804bcb58328b93441f;
-    bytes32 public constant GROVE_USDC_V4_POOL_ID_THREE =
-        0xb557b2447a4723741959fe7ebd5a37375023931d19f6383cc83bd0d9c8397bb9;
-    bytes32 public constant GROVE_USDC_V4_POOL_ID_FOUR =
-        0x2e53ef1a957f41bfba562bac317881d6f0ef2d6c217c7279c11b0878f9791ad5;
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    uint256 public constant MIN_REWARD_POOL_LIQUIDITY = 1e12;
-    uint256 public constant MIN_REWARD_POOL_USDC_BALANCE = 1_000e6;
 
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
@@ -42,7 +29,6 @@ contract Setup is Test, IEvents {
 
     // auction to be used by our strategy
     Auction public auction;
-    AuctionFactory public auctionFactory = AuctionFactory(0xCfA510188884F199fcC6e750764FAAbE6e56ec40);
 
     mapping(string => address) public tokenAddrs;
 
@@ -59,21 +45,19 @@ contract Setup is Test, IEvents {
     // Address of the real deployed Factory
     address public factory;
 
-    bool public defaultedToAuction;
-
     // Integer variables that will be used repeatedly.
     uint256 public decimals;
-    uint256 public MAX_BPS = 10_000;
+    uint256 public constant MAX_BPS = 10_000;
 
     // Fuzz deposit sizes that keep live-fork reward accounting manageable.
     uint256 public maxFuzzAmount = 10_000e18;
     uint256 public minFuzzAmount = 10_000;
 
+    // Minimum GROVE auction price in USDS terms, scaled to 1e18.
+    uint256 public constant DEFAULT_MINIMUM_AUCTION_PRICE = 6e15;
+
     // use this as a cutoff to expect when deposits/withdrawals won't cause detectable APR differences
     uint256 public constant ORACLE_FUZZ_MIN = 1e15;
-
-    // use this as a cutoff to expect when we won't generate meaningful profit
-    uint256 public constant PROFIT_FUZZ_MIN = 10_000e18;
 
     // set profit max unlock time for 1 days since rewards are paid weekly
     uint256 public profitMaxUnlockTime = 1 days;
@@ -90,15 +74,12 @@ contract Setup is Test, IEvents {
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
-
-        // setup our auction with our rewards token to sell
-        setUpAuction(strategy.REWARDS_TOKEN());
+        auction = Auction(strategy.auction());
 
         // set min amount to sell super low for testing ~($1.50)
+        address rewardsToken = strategy.REWARDS_TOKEN();
         vm.prank(management);
-        strategy.setMinAmountToSell(50e18);
-
-        defaultToAuction();
+        strategy.setMinAmountToSell(rewardsToken, 50e18);
 
         factory = strategy.FACTORY();
 
@@ -154,49 +135,6 @@ contract Setup is Test, IEvents {
         return address(_strategy);
     }
 
-    function setUpAuction(address _token) public {
-        // deploy auction for the strategy
-        auction = Auction(auctionFactory.createNewAuction(address(asset), address(strategy), management));
-
-        // enable reward token on our auction
-        vm.prank(management);
-        auction.enable(_token);
-    }
-
-    function rewardSalePoolHasUsableLiquidity() public view returns (bool) {
-        return IUniswapV3Pool(GROVE_USDC_V3_POOL).liquidity() >= MIN_REWARD_POOL_LIQUIDITY
-            && ERC20(USDC).balanceOf(GROVE_USDC_V3_POOL) >= MIN_REWARD_POOL_USDC_BALANCE;
-    }
-
-    function rewardV4PoolHasUsableLiquidity() public view returns (bool) {
-        return _v4PoolHasUsableLiquidity(GROVE_USDC_V4_POOL_ID) || _v4PoolHasUsableLiquidity(GROVE_USDC_V4_POOL_ID_TWO)
-            || _v4PoolHasUsableLiquidity(GROVE_USDC_V4_POOL_ID_THREE)
-            || _v4PoolHasUsableLiquidity(GROVE_USDC_V4_POOL_ID_FOUR);
-    }
-
-    function _v4PoolHasUsableLiquidity(bytes32 _poolId) internal view returns (bool) {
-        try UNISWAP_V4_STATE_VIEW.getLiquidity(_poolId) returns (uint128 liquidity) {
-            return liquidity >= MIN_REWARD_POOL_LIQUIDITY;
-        } catch {
-            return false;
-        }
-    }
-
-    function rewardPricingHasUsableLiquidity() public view returns (bool) {
-        return rewardSalePoolHasUsableLiquidity() || rewardV4PoolHasUsableLiquidity();
-    }
-
-    function defaultToAuction() internal {
-        vm.startPrank(management);
-        strategy.setAuction(address(auction));
-        if (!strategy.useAuction()) {
-            strategy.setUseAuction(true);
-        }
-        vm.stopPrank();
-
-        defaultedToAuction = true;
-    }
-
     function simulateAuction(uint256 _profitAmount) public {
         // cache our rewards token
         address rewardsToken = strategy.REWARDS_TOKEN();
@@ -207,7 +145,7 @@ contract Setup is Test, IEvents {
 
         // check for reward token balance in auction
         uint256 rewardBalance = ERC20(rewardsToken).balanceOf(address(auction));
-        uint256 strategyBalance = ERC20(rewardsToken).balanceOf(address(auction));
+        uint256 strategyBalance = ERC20(rewardsToken).balanceOf(address(strategy));
         console2.log("Reward token sitting in our strategy", strategyBalance / 1e18, "* 1e18");
 
         // if we have reward tokens, sweep it out, and send back our designated profitAmount
@@ -215,7 +153,7 @@ contract Setup is Test, IEvents {
             console2.log("Reward token sitting in our auction", rewardBalance / 1e18, "* 1e18");
 
             vm.prank(address(auction));
-            ERC20(rewardsToken).transfer(user, rewardBalance);
+            assertTrue(ERC20(rewardsToken).transfer(user, rewardBalance));
             airdrop(asset, address(strategy), _profitAmount);
             rewardBalance = ERC20(rewardsToken).balanceOf(address(auction));
         }

@@ -20,7 +20,15 @@ interface IStrategyInterface is IBaseHealthCheck {
 
     function auction() external view returns (address);
 
-    function useAuction() external view returns (bool);
+    function AUCTION_FACTORY() external view returns (address);
+
+    function minimumAuctionPrice() external view returns (uint256);
+
+    function DEFAULT_MINIMUM_AUCTION_PRICE() external view returns (uint256);
+
+    function DEFAULT_AUCTION_STARTING_PRICE() external view returns (uint256);
+
+    function DEFAULT_AUCTION_STEP_DECAY_RATE() external view returns (uint256);
 
     function claimRewards() external;
 
@@ -30,15 +38,17 @@ interface IStrategyInterface is IBaseHealthCheck {
 
     function allowed(address _depositor) external view returns (bool);
 
-    function setMinAmountToSell(uint256 _minAmountToSell) external;
+    function setMinAmountToSell(address _token, uint256 _minAmountToSell) external;
 
-    function setUniV3Fees(uint24 _rewardToBase) external;
+    function enableAuctionToken(address _token, uint256 _minAmountToSell) external;
+
+    function setMinimumAuctionPrice(uint256 _minimumAuctionPrice) external;
+
+    function setAuctionStartingPrice(uint256 _startingPrice) external;
+
+    function setAuctionStepDecayRate(uint256 _stepDecayRate) external;
 
     function setAllowed(address _depositor, bool _allowed) external;
 
     function setReferral(uint16 _referral) external;
-
-    function setAuction(address _auction) external;
-
-    function setUseAuction(bool _useAuction) external;
 }

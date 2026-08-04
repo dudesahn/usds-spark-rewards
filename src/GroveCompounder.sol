@@ -4,53 +4,65 @@ pragma solidity 0.8.28;
 import {BaseHealthCheck, ERC20} from "@periphery/Bases/HealthCheck/BaseHealthCheck.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {TokenizedStrategyLib as TokenizedStrategy} from "@tokenized-strategy/libraries/TokenizedStrategyLib.sol";
-import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
+import {BaseSwapper} from "@periphery/swappers/BaseSwapper.sol";
 import {Auction} from "@periphery/Auctions/Auction.sol";
+import {AuctionFactory} from "@periphery/Auctions/AuctionFactory.sol";
 import {IStaking} from "src/interfaces/IStaking.sol";
-import {IPsmWrapper} from "src/interfaces/IPsmWrapper.sol";
 
-contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
+contract GroveCompounder is BaseSwapper, BaseHealthCheck {
     using SafeERC20 for ERC20;
 
     /// @notice yearn's referral code
     uint16 public referral = 2009;
 
     /// @notice Address of the specific Auction this strategy uses.
-    address public auction;
+    // forge-lint: disable-next-line(screaming-snake-case-immutable)
+    address public immutable auction;
 
-    /// @notice True if we should use auctions, if false use UniV3
-    bool public useAuction = true;
+    /// @notice Yearn AuctionFactory used so taker bots can discover the auction.
+    AuctionFactory public constant AUCTION_FACTORY = AuctionFactory(0x55B3830B4D85e6868c73f00A2e857e9AdbF89568);
+
+    /// @notice Default minimum GROVE auction price in USDS terms, scaled to 1e18.
+    uint256 public constant DEFAULT_MINIMUM_AUCTION_PRICE = 6e15;
+
+    /// @notice Default auction starting price, scaled to 1e18.
+    uint256 public constant DEFAULT_AUCTION_STARTING_PRICE = 10_000e18;
+
+    /// @notice Default auction step decay rate in basis points.
+    uint256 public constant DEFAULT_AUCTION_STEP_DECAY_RATE = 30;
+
+    /// @notice Required Auction.minimumPrice() before this strategy will kick GROVE.
+    uint256 public minimumAuctionPrice = DEFAULT_MINIMUM_AUCTION_PRICE;
 
     /// @notice Reward token we get for staking
     address public immutable REWARDS_TOKEN;
 
     /// @notice Staking contract we use
-    IStaking public constant STAKING =
-        IStaking(0x4E41488C19cD35EB4de3083Fc3e204854c75c86a);
-
-    /// @notice Wrapper for PSM with USDS
-    IPsmWrapper internal constant PSM_WRAPPER =
-        IPsmWrapper(0xA188EEC8F81263234dA3622A406892F3D630f98c);
+    IStaking public constant STAKING = IStaking(0x4E41488C19cD35EB4de3083Fc3e204854c75c86a);
 
     /// @notice Don't bother spending the gas to stake dust
     uint256 internal constant DUST = 1e18;
 
-    constructor() BaseHealthCheck(PSM_WRAPPER.usds(), "Grove USDS Compounder") {
+    constructor() BaseHealthCheck(STAKING.stakingToken(), "Grove USDS Compounder") {
         require(!STAKING.paused(), "!paused");
-        require(PSM_WRAPPER.usds() == STAKING.stakingToken(), "!stakingToken");
         REWARDS_TOKEN = STAKING.rewardsToken();
 
-        // approve staking contract and our PSM wrapper
+        // approve staking contract
         asset.forceApprove(address(STAKING), type(uint256).max);
 
-        // use USDC for our UniV3 swaps and then send it through the PSM for USDS
-        address usdc = PSM_WRAPPER.gem();
-        ERC20(usdc).forceApprove(address(PSM_WRAPPER), type(uint).max); //approve the PSM
+        // Set the min amount for the auction to sell
+        _setMinAmountToSell(REWARDS_TOKEN, 10_000e18);
 
-        // Set the min amount for the swapper/auction to sell
-        base = usdc; // use USDC as base in UniV3
-        _setMinAmountToSell(REWARDS_TOKEN, 5_000e18);
-        _setUniFees(REWARDS_TOKEN, usdc, 10_000); // GROVE-USDC pool is 1%. uniV3 fees in 1/100 of bps
+        Auction _auction = Auction(
+            AUCTION_FACTORY.createNewAuction(
+                address(asset), address(this), address(this), DEFAULT_AUCTION_STARTING_PRICE
+            )
+        );
+        _auction.enable(REWARDS_TOKEN);
+        _auction.setMinimumPrice(DEFAULT_MINIMUM_AUCTION_PRICE);
+        _auction.setStepDecayRate(DEFAULT_AUCTION_STEP_DECAY_RATE);
+        _auction.setGovernanceOnlyKick(true);
+        auction = address(_auction);
     }
 
     /* ========== VIEW FUNCTIONS ========== */
@@ -81,31 +93,15 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
         STAKING.withdraw(_amount);
     }
 
-    function _harvestAndReport()
-        internal
-        override
-        returns (uint256 _totalAssets)
-    {
+    function _harvestAndReport() internal override returns (uint256 _totalAssets) {
         // get our rewards. if no rewards is a noop so no worries about reverts
         _claimRewards();
 
         // store in memory to save gas
-        uint256 toSwap = balanceOfRewards();
-        uint256 minRewardAmountToSell = minAmountToSell[REWARDS_TOKEN];
+        uint256 rewardsBalance = balanceOfRewards();
 
-        if (!useAuction) {
-            if (toSwap > minRewardAmountToSell) {
-                require(PSM_WRAPPER.tin() == 0, "!psmFee");
-                // swap if using UniV3 to sell rewards
-                _swapFrom(REWARDS_TOKEN, base, toSwap, 0);
-                // use PSM to go from USDC to USDS for free
-                PSM_WRAPPER.sellGem(
-                    address(this),
-                    ERC20(base).balanceOf(address(this))
-                );
-            }
-        } else if (toSwap > minRewardAmountToSell) {
-            _kickAuction(REWARDS_TOKEN, toSwap);
+        if (rewardsBalance > minAmountToSell[REWARDS_TOKEN]) {
+            _kickAuction(REWARDS_TOKEN, rewardsBalance);
         }
 
         uint256 balance = balanceOfAsset();
@@ -122,9 +118,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
         _freeFunds(_amount);
     }
 
-    function availableDepositLimit(
-        address _receiver
-    ) public view override returns (uint256) {
+    function availableDepositLimit(address _receiver) public view override returns (uint256) {
         if (STAKING.paused()) {
             return 0;
         }
@@ -142,7 +136,7 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
      * @notice Manually claim rewards from staking contract.
      * @dev Can only be called by management.
      */
-    function claimRewards() external onlyManagement {
+    function claimRewards() external onlyKeepers {
         _claimRewards();
     }
 
@@ -151,79 +145,89 @@ contract GroveCompounder is UniswapV3Swapper, BaseHealthCheck {
     }
 
     /**
-     * @notice Kick an auction to sell rewards to more asset.
-     * @dev Can only be called by keepers. useAuction must be set to true. Can't kick asset.
+     * @notice Kick an auction to sell tokens to more asset.
+     * @dev Can only be called by keepers. Claims rewards before kicking the reward token.
      * @param _token Token to kick the auction for.
      */
     function kickAuction(address _token) external onlyKeepers {
-        require(useAuction, "!useAuction");
-        uint256 rewardsBalance;
-
+        uint256 tokenBalance;
         if (_token == REWARDS_TOKEN) {
             _claimRewards();
-            rewardsBalance = balanceOfRewards();
+            tokenBalance = balanceOfRewards();
         } else {
-            rewardsBalance = ERC20(_token).balanceOf(address(this));
+            tokenBalance = ERC20(_token).balanceOf(address(this));
         }
 
-        if (rewardsBalance > minAmountToSell[REWARDS_TOKEN]) {
-            _kickAuction(_token, rewardsBalance);
+        if (tokenBalance > minAmountToSell[_token]) {
+            _kickAuction(_token, tokenBalance);
         }
     }
 
     function _kickAuction(address _token, uint256 _balance) internal {
         require(_token != address(asset), "!asset");
-        address _auction = auction;
-        require(_auction != address(0), "!auction");
-        ERC20(_token).safeTransfer(_auction, _balance);
-        Auction(_auction).kick(_token);
+        Auction auctionContract = Auction(auction);
+
+        if (auctionContract.isActive(_token)) {
+            if (auctionContract.available(_token) > 0) return;
+            auctionContract.settle(_token);
+        }
+
+        ERC20(_token).safeTransfer(auction, _balance);
+        auctionContract.kick(_token);
     }
 
     /* ========== PERMISSIONED SETTER FUNCTIONS ========== */
 
     /**
-     * @notice Set the minimum amount of rewardsToken to sell.
+     * @notice Set the minimum amount of a token to sell.
      * @dev Can only be called by management.
+     * @param _token Token to set the minimum for.
      * @param _minAmountToSell minimum amount to sell in wei.
      */
-    function setMinAmountToSell(
-        uint256 _minAmountToSell
-    ) external onlyManagement {
-        _setMinAmountToSell(REWARDS_TOKEN, _minAmountToSell);
+    function setMinAmountToSell(address _token, uint256 _minAmountToSell) external onlyManagement {
+        _setMinAmountToSell(_token, _minAmountToSell);
     }
 
     /**
-     * @notice Set fees for UniswapV3 to sell rewardsToken.
-     * @dev Can only be called by management.
-     * @param _rewardToBase fee reward to base (grove/usdc)
+     * @notice Enable an auction token and set its minimum amount to sell.
+     * @dev Can only be called by management. Useful for selling non-reward tokens
+     *      accidentally sent to the strategy.
+     * @param _token Token to enable for auctions.
+     * @param _minAmountToSell minimum amount to sell in wei.
      */
-    function setUniV3Fees(uint24 _rewardToBase) external onlyManagement {
-        _setUniFees(REWARDS_TOKEN, base, _rewardToBase);
+    function enableAuctionToken(address _token, uint256 _minAmountToSell) external onlyManagement {
+        require(_token != address(asset), "!asset");
+        Auction(auction).enable(_token);
+        _setMinAmountToSell(_token, _minAmountToSell);
     }
 
     /**
-     * @notice Set address for our auction contract.
-     * @dev Can only be called by management.
-     * @param _auction Address of the auction to use.
+     * @notice Set the minimum GROVE auction price required by the strategy.
+     * @dev Can only be called by management. The Auction itself must be configured
+     *      with at least this minimum price before rewards can be kicked.
+     * @param _minimumAuctionPrice Minimum auction price in USDS terms, scaled to 1e18.
      */
-    function setAuction(address _auction) external onlyManagement {
-        if (_auction != address(0)) {
-            require(Auction(_auction).receiver() == address(this), "receiver");
-            require(Auction(_auction).want() == address(asset), "want");
-        } else {
-            require(!useAuction, "!auction");
-        }
-        auction = _auction;
+    function setMinimumAuctionPrice(uint256 _minimumAuctionPrice) external onlyManagement {
+        Auction(auction).setMinimumPrice(_minimumAuctionPrice);
+        minimumAuctionPrice = _minimumAuctionPrice;
     }
 
     /**
-     * @notice Set whether to use auction or UniV3 for rewards selling.
-     * @dev Can only be called by management.
-     * @param _useAuction Use auction to sell rewards (true) or UniV3 (false).
+     * @notice Set the auction starting price.
+     * @dev Can only be called by management. Reverts while any enabled auction is active.
+     * @param _startingPrice New starting price, scaled to 1e18.
      */
-    function setUseAuction(bool _useAuction) external onlyManagement {
-        if (_useAuction) require(auction != address(0), "!auction");
-        useAuction = _useAuction;
+    function setAuctionStartingPrice(uint256 _startingPrice) external onlyManagement {
+        Auction(auction).setStartingPrice(_startingPrice);
+    }
+
+    /**
+     * @notice Set the auction step decay rate.
+     * @dev Can only be called by management. Reverts while any enabled auction is active.
+     * @param _stepDecayRate New step decay rate in basis points.
+     */
+    function setAuctionStepDecayRate(uint256 _stepDecayRate) external onlyManagement {
+        Auction(auction).setStepDecayRate(_stepDecayRate);
     }
 
     /**
