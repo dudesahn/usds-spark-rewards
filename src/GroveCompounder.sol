@@ -134,7 +134,7 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
 
     /**
      * @notice Manually claim rewards from staking contract.
-     * @dev Can only be called by management.
+     * @dev Can only be called by keepers.
      */
     function claimRewards() external onlyKeepers {
         _claimRewards();
