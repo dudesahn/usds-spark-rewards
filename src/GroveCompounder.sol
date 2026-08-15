@@ -19,7 +19,7 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
     // forge-lint: disable-next-line(screaming-snake-case-immutable)
     address public immutable auction;
 
-    /// @notice Yearn AuctionFactory used so taker bots can discover the auction.
+    /// @notice Yearn AuctionFactory used so taker bots can more easily discover the auction.
     AuctionFactory public constant AUCTION_FACTORY = AuctionFactory(0x55B3830B4D85e6868c73f00A2e857e9AdbF89568);
 
     /// @notice Default minimum GROVE auction price in USDS terms, scaled to 1e18.
