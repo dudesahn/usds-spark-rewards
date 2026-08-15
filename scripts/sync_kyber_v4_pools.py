@@ -12,9 +12,10 @@ By default the script asks Kyber for its unrestricted best GROVE/USDC routes at
 that sells GROVE for either USDC or USDT. Set ``QUOTE_AMOUNTS`` to a comma-
 separated list of GROVE amounts to override the probes.
 
-Discovered pools are recorded in ``grove_univ4_pool_registry.json``. The oracle
-keeps currently active pools plus the most recently active historical pools up
-to ``MAX_V4_POOLS``; a pool is not removed merely because one run did not use it.
+Discovered pools are recorded in ``grove_univ4_pool_registry.json``. The
+registry retains the full history, while the oracle keeps only pools observed
+in a Kyber route during the previous seven days, up to ``MAX_V4_POOLS``. If
+none qualify, the most recently observed historical pool is retained.
 
 Examples:
 
@@ -83,6 +84,7 @@ DEFAULT_QUOTE_AMOUNTS = (
     100_000 * 10**18,
 )
 CLIENT_ID = "grove-apr-oracle-pool-sync"
+POOL_RETENTION_SECONDS = 7 * 24 * 60 * 60
 
 ORACLE_ABI = [
     {
@@ -243,11 +245,57 @@ def _register_configured_pools(registry, configured_entries):
             )
 
 
-def _selected_pools(registry, route_pools, max_pools):
+def _last_seen_timestamp(entry):
+    last_seen_at = entry.get("last_seen_at")
+    if not last_seen_at:
+        return None
+    try:
+        observed_at = datetime.fromisoformat(last_seen_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            "Invalid last_seen_at for {}: {}".format(
+                entry["pool_id"], last_seen_at
+            )
+        ) from error
+    if observed_at.tzinfo is None:
+        observed_at = observed_at.replace(tzinfo=timezone.utc)
+    return int(observed_at.timestamp())
+
+
+def _selected_pools(registry, route_pools, max_pools, current_timestamp):
     active_order = {pool_id: index for index, pool_id in enumerate(route_pools)}
     registry_order = {
         entry["pool_id"]: index for index, entry in enumerate(registry["pools"])
     }
+    cutoff = current_timestamp - POOL_RETENTION_SECONDS
+    recent_entries = []
+    observed_entries = []
+    for entry in registry["pools"]:
+        last_seen_timestamp = _last_seen_timestamp(entry)
+        if last_seen_timestamp is not None:
+            observed_entries.append((last_seen_timestamp, entry))
+        if last_seen_timestamp is not None and last_seen_timestamp >= cutoff:
+            recent_entries.append(entry)
+
+    if not recent_entries:
+        if observed_entries:
+            recent_entries = [
+                max(
+                    observed_entries,
+                    key=lambda observed: (
+                        observed[0],
+                        observed[1]["last_seen_block"],
+                        -registry_order[observed[1]["pool_id"]],
+                    ),
+                )[1]
+            ]
+        else:
+            configured_pool_ids = registry.get("oracle_pool_ids", [])
+            if configured_pool_ids:
+                entries_by_id = {
+                    entry["pool_id"]: entry for entry in registry["pools"]
+                }
+                recent_entries = [entries_by_id[configured_pool_ids[0]]]
 
     def sort_key(entry):
         pool_id = entry["pool_id"]
@@ -255,11 +303,12 @@ def _selected_pools(registry, route_pools, max_pools):
         return (
             0 if is_active else 1,
             active_order.get(pool_id, 0),
+            -(_last_seen_timestamp(entry) or 0),
             -entry["last_seen_block"],
             registry_order[pool_id],
         )
 
-    ordered = sorted(registry["pools"], key=sort_key)
+    ordered = sorted(recent_entries, key=sort_key)
     return [entry["pool_id"] for entry in ordered[:max_pools]]
 
 
@@ -305,13 +354,23 @@ def sync_pools(
         chain.height,
         chain.time(),
     )
-    selected_pools = _selected_pools(registry, route_pools, max_pools)
+    current_timestamp = chain.time()
+    selected_pools = _selected_pools(
+        registry, route_pools, max_pools, current_timestamp
+    )
     selected_pools = _preserve_configured_order(configured_pools, selected_pools)
     retained_pools = [pool for pool in selected_pools if pool not in seen]
-    evicted_pools = [
+    cutoff = current_timestamp - POOL_RETENTION_SECONDS
+    stale_pools = []
+    for entry in registry["pools"]:
+        last_seen_timestamp = _last_seen_timestamp(entry)
+        if last_seen_timestamp is None or last_seen_timestamp < cutoff:
+            stale_pools.append(entry["pool_id"])
+    capacity_excluded_pools = [
         entry["pool_id"]
         for entry in registry["pools"]
         if entry["pool_id"] not in selected_pools
+        and entry["pool_id"] not in stale_pools
     ]
     registry["oracle_pool_ids"] = selected_pools
     registry_would_change = serialized_registry(registry) != original_registry
@@ -330,8 +389,21 @@ def sync_pools(
         print("No compatible V4 first leg appeared in Kyber's best routes.")
     _print_pools("Retained from registry history:", retained_pools)
     _print_pools("Selected for oracle:", selected_pools)
-    if evicted_pools:
-        _print_pools("Outside the {}-pool capacity:".format(max_pools), evicted_pools)
+    if stale_pools:
+        _print_pools("Not seen during the seven-day retention window:", stale_pools)
+    stale_retained_pools = [
+        pool_id for pool_id in selected_pools if pool_id in stale_pools
+    ]
+    if stale_retained_pools:
+        _print_pools(
+            "No recent pools found; retaining the most recent historical pool:",
+            stale_retained_pools,
+        )
+    if capacity_excluded_pools:
+        _print_pools(
+            "Outside the {}-pool capacity:".format(max_pools),
+            capacity_excluded_pools,
+        )
     if registry_would_change:
         print("Pool registry preview: changes available (not written yet).")
     else:

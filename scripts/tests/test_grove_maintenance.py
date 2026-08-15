@@ -216,6 +216,90 @@ class MaintenancePolicyTest(unittest.TestCase):
             configured,
         )
 
+    def test_pool_selection_keeps_only_pools_seen_during_the_last_week(self):
+        current_timestamp = 2_000_000_000
+        recent_timestamp = current_timestamp - sync_script.POOL_RETENTION_SECONDS
+        stale_timestamp = recent_timestamp - 1
+        registry = {
+            "pools": [
+                {
+                    "pool_id": "recent",
+                    "last_seen_at": sync_script.datetime.fromtimestamp(
+                        recent_timestamp, sync_script.timezone.utc
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "last_seen_block": 2,
+                },
+                {
+                    "pool_id": "stale",
+                    "last_seen_at": sync_script.datetime.fromtimestamp(
+                        stale_timestamp, sync_script.timezone.utc
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "last_seen_block": 1,
+                },
+                {
+                    "pool_id": "never-seen",
+                    "last_seen_at": None,
+                    "last_seen_block": 0,
+                },
+            ]
+        }
+
+        self.assertEqual(
+            sync_script._selected_pools(
+                registry, [], 10, current_timestamp
+            ),
+            ["recent"],
+        )
+
+    def test_pool_selection_keeps_most_recent_when_every_pool_is_stale(self):
+        current_timestamp = 2_000_000_000
+        registry = {
+            "oracle_pool_ids": ["older", "newer"],
+            "pools": [
+                {
+                    "pool_id": "older",
+                    "last_seen_at": "2020-01-01T00:00:00Z",
+                    "last_seen_block": 1,
+                },
+                {
+                    "pool_id": "newer",
+                    "last_seen_at": "2020-01-02T00:00:00Z",
+                    "last_seen_block": 2,
+                },
+            ],
+        }
+
+        self.assertEqual(
+            sync_script._selected_pools(registry, [], 10, current_timestamp),
+            ["newer"],
+        )
+
+    def test_sync_retains_configured_pool_when_registry_has_no_observations(self):
+        quote_token = next(iter(sync_script.SUPPORTED_QUOTE_TOKENS))
+        registry = {
+            "oracle_pool_ids": ["stale"],
+            "pools": [
+                {
+                    "pool_id": "stale",
+                    "quote_token": quote_token,
+                    "last_seen_at": None,
+                    "last_seen_block": 0,
+                }
+            ],
+        }
+        oracle = FakeOracle(registry)
+        route = {"amountIn": str(10_000 * 10**18), "amountOut": "1", "route": []}
+
+        with patch.object(
+            sync_script, "load_registry", return_value=copy.deepcopy(registry)
+        ), patch.object(sync_script, "write_registry"), patch.object(
+            sync_script, "write_generated_config"
+        ):
+            selected = sync_script.sync_pools(oracle, [route], broadcast=True)
+
+        self.assertEqual(selected, ["stale"])
+        self.assertEqual(oracle.set_calls, 0)
+
     def test_dry_run_does_not_write_registry_files(self):
         registry = registry_module.load_registry()
         oracle = FakeOracle(registry)
@@ -248,6 +332,9 @@ class MaintenancePolicyTest(unittest.TestCase):
 
     def test_broadcast_does_not_transact_for_reorder_only_change(self):
         registry = registry_module.load_registry()
+        registry["oracle_pool_ids"] = sync_script._selected_pools(
+            registry, [], 10, sync_script.chain.time()
+        )
         oracle = FakeOracle(registry)
         oracle.pool_ids.reverse()
         oracle.quote_tokens.reverse()
