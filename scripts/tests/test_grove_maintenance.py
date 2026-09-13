@@ -22,6 +22,7 @@ if "click" not in sys.modules:
 
 price_script = importlib.import_module("scripts.refresh_grove_price")
 sync_script = importlib.import_module("scripts.sync_kyber_v4_pools")
+common_module = importlib.import_module("scripts.grove_maintenance_common")
 registry_module = importlib.import_module("scripts.grove_pool_registry")
 
 
@@ -49,19 +50,14 @@ class FakeOracle:
 class FakePriceOracle:
     def __init__(self, max_deviation_bps=5_000):
         self.max_deviation_bps = max_deviation_bps
-        self.confirm_calls = []
-        self.manual_calls = []
+        self.price_calls = []
 
     def MAX_LIVE_PRICE_DEVIATION_BPS(self):
         return self.max_deviation_bps
 
-    def confirmLiveGrovePrice(self, expected_price, transaction):
-        self.confirm_calls.append((expected_price, transaction))
-        return types.SimpleNamespace(txid="0xconfirm")
-
-    def setManualGrovePrice(self, price, transaction):
-        self.manual_calls.append((price, transaction))
-        return types.SimpleNamespace(txid="0xmanual")
+    def setGrovePrice(self, price, transaction):
+        self.price_calls.append((price, transaction))
+        return types.SimpleNamespace(txid="0xprice")
 
 
 class FakeStrategy:
@@ -96,39 +92,107 @@ class FakeAuction:
 
 
 class MaintenancePolicyTest(unittest.TestCase):
+    def test_authorized_account_defaults_to_llc2(self):
+        loaded = []
+        sender = types.SimpleNamespace(
+            address="0x0000000000000000000000000000000000000001"
+        )
+        fake_accounts = types.SimpleNamespace(
+            load=lambda account_name: loaded.append(account_name) or sender
+        )
+
+        with patch.dict(os.environ, {}, clear=True):
+            result = common_module.load_authorized_account(
+                fake_accounts, "test operation", lambda address: True
+            )
+
+        self.assertIs(result, sender)
+        self.assertEqual(loaded, ["llc2"])
+
+    def test_mainnet_deployment_check_warns_when_strategy_is_not_queued(self):
+        oracle_address = "0x0000000000000000000000000000000000000001"
+        strategy_address = "0x0000000000000000000000000000000000000002"
+        yearn_oracle = types.SimpleNamespace(
+            oracles=lambda strategy: oracle_address
+        )
+        vault = types.SimpleNamespace(
+            get_default_queue=lambda: [
+                "0x0000000000000000000000000000000000000003"
+            ]
+        )
+        contract_factory = types.SimpleNamespace(
+            from_abi=lambda name, address, abi: (
+                yearn_oracle if name == "YearnAprOracle" else vault
+            )
+        )
+
+        with patch("builtins.print") as output:
+            in_queue = common_module.validate_mainnet_deployment(
+                contract_factory, oracle_address, strategy_address
+            )
+
+        self.assertFalse(in_queue)
+        self.assertTrue(
+            any(
+                call.args
+                and "WARNING: strategy" in call.args[0]
+                and "not in the USDS-1 default queue" in call.args[0]
+                for call in output.call_args_list
+            )
+        )
+
+    def test_mainnet_deployment_check_rejects_wrong_yearn_oracle(self):
+        expected_oracle = "0x0000000000000000000000000000000000000001"
+        registered_oracle = "0x0000000000000000000000000000000000000002"
+        strategy_address = "0x0000000000000000000000000000000000000003"
+        yearn_oracle = types.SimpleNamespace(
+            oracles=lambda strategy: registered_oracle
+        )
+        contract_factory = types.SimpleNamespace(
+            from_abi=lambda name, address, abi: yearn_oracle
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "maps strategy"):
+            common_module.validate_mainnet_deployment(
+                contract_factory, expected_oracle, strategy_address
+            )
+
     def test_stored_price_refresh_policy(self):
         self.assertEqual(
             price_script._refresh_reason(0, 0, 0),
-            "initialize the stored fallback",
+            "initialize the stored reference",
         )
-        self.assertIsNone(price_script._refresh_reason(1, 71 * 60 * 60, 999))
-        self.assertIsNotNone(price_script._refresh_reason(1, 72 * 60 * 60, 0))
+        self.assertIsNone(price_script._refresh_reason(1, 35 * 60 * 60, 999))
+        self.assertIsNotNone(price_script._refresh_reason(1, 36 * 60 * 60, 0))
         self.assertIsNotNone(price_script._refresh_reason(1, 0, 1_000))
-        self.assertIn("manual", price_script._refresh_reason(1, 0, 0, True))
 
-    def test_large_live_confirmation_passes_the_displayed_price(self):
+    def test_kyber_broadcast_stores_raw_quote_without_haircut(self):
         oracle = FakePriceOracle()
         sender = object()
-        live_price = 2 * 10**18
+        quoted_price = 7_809_813_320_000_000
+        quote_amount = 100_000 * 10**18
+        route = {
+            "amountIn": str(quote_amount),
+            "amountOut": str(780_981_332),
+        }
 
         with (
-            patch.object(price_script, "_interactive_confirm", return_value=True),
+            patch.object(
+                price_script,
+                "_fetch_kyber_price",
+                return_value=(quoted_price, route),
+            ),
             patch.object(price_script, "_load_authorized_account", return_value=sender),
         ):
-            selected_price, source = price_script._refresh_from_live(
-                oracle,
-                live_price,
-                10**18,
-                False,
-                0,
-                True,
+            selected_price, source = price_script._refresh_from_kyber(
+                oracle, quote_amount, 0, 0, True
             )
 
-        self.assertEqual(selected_price, live_price)
-        self.assertEqual(source, "confirmed live V4")
-        self.assertEqual(oracle.confirm_calls, [(live_price, {"from": sender})])
+        self.assertEqual(selected_price, quoted_price)
+        self.assertEqual(source, "Kyber executable reference")
+        self.assertEqual(oracle.price_calls, [(quoted_price, {"from": sender})])
 
-    def test_kyber_dry_run_applies_five_percent_haircut_without_transaction(self):
+    def test_kyber_dry_run_uses_raw_quote_without_transaction(self):
         oracle = FakePriceOracle()
         quoted_price = 10**18
         quote_amount = 10_000 * 10**18
@@ -153,10 +217,26 @@ class MaintenancePolicyTest(unittest.TestCase):
                 False,
             )
 
-        self.assertEqual(selected_price, 95 * 10**16)
-        self.assertEqual(source, "manual Kyber (5% haircut)")
-        self.assertEqual(oracle.manual_calls, [])
+        self.assertEqual(selected_price, quoted_price)
+        self.assertEqual(source, "Kyber executable reference")
+        self.assertEqual(oracle.price_calls, [])
         load_account.assert_not_called()
+
+    def test_kyber_price_quote_defaults_to_one_hundred_thousand_grove(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                price_script._kyber_quote_amount(),
+                100_000 * 10**18,
+            )
+
+    def test_kyber_price_quote_amount_can_be_overridden_in_grove_units(self):
+        with patch.dict(
+            os.environ, {"KYBER_QUOTE_AMOUNT": "250000"}, clear=True
+        ):
+            self.assertEqual(
+                price_script._kyber_quote_amount(),
+                250_000 * 10**18,
+            )
 
     def test_active_auction_defers_floor_update_before_prompt_or_account_load(self):
         strategy = FakeStrategy(60 * 10**14)
@@ -216,24 +296,13 @@ class MaintenancePolicyTest(unittest.TestCase):
             configured,
         )
 
-    def test_pool_selection_keeps_only_pools_seen_during_the_last_week(self):
-        current_timestamp = 2_000_000_000
-        recent_timestamp = current_timestamp - sync_script.POOL_RETENTION_SECONDS
-        stale_timestamp = recent_timestamp - 1
+    def test_pool_selection_retains_active_pools_regardless_of_last_seen_time(self):
         registry = {
+            "oracle_pool_ids": ["stale", "never-seen"],
             "pools": [
                 {
-                    "pool_id": "recent",
-                    "last_seen_at": sync_script.datetime.fromtimestamp(
-                        recent_timestamp, sync_script.timezone.utc
-                    ).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "last_seen_block": 2,
-                },
-                {
                     "pool_id": "stale",
-                    "last_seen_at": sync_script.datetime.fromtimestamp(
-                        stale_timestamp, sync_script.timezone.utc
-                    ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "last_seen_at": "2020-01-01T00:00:00Z",
                     "last_seen_block": 1,
                 },
                 {
@@ -246,32 +315,26 @@ class MaintenancePolicyTest(unittest.TestCase):
 
         self.assertEqual(
             sync_script._selected_pools(
-                registry, [], 10, current_timestamp
+                registry, [], 10, 2_000_000_000
             ),
-            ["recent"],
+            ["stale", "never-seen"],
         )
 
-    def test_pool_selection_keeps_most_recent_when_every_pool_is_stale(self):
-        current_timestamp = 2_000_000_000
+    def test_pool_selection_appends_new_kyber_discoveries(self):
         registry = {
-            "oracle_pool_ids": ["older", "newer"],
+            "oracle_pool_ids": ["existing"],
             "pools": [
-                {
-                    "pool_id": "older",
-                    "last_seen_at": "2020-01-01T00:00:00Z",
-                    "last_seen_block": 1,
-                },
-                {
-                    "pool_id": "newer",
-                    "last_seen_at": "2020-01-02T00:00:00Z",
-                    "last_seen_block": 2,
-                },
+                {"pool_id": "existing"},
+                {"pool_id": "new-one"},
+                {"pool_id": "new-two"},
             ],
         }
 
         self.assertEqual(
-            sync_script._selected_pools(registry, [], 10, current_timestamp),
-            ["newer"],
+            sync_script._selected_pools(
+                registry, ["new-one", "existing", "new-two"], 2, 0
+            ),
+            ["existing", "new-one"],
         )
 
     def test_sync_retains_configured_pool_when_registry_has_no_observations(self):

@@ -12,17 +12,18 @@ By default the script asks Kyber for its unrestricted best GROVE/USDC routes at
 that sells GROVE for either USDC or USDT. Set ``QUOTE_AMOUNTS`` to a comma-
 separated list of GROVE amounts to override the probes.
 
-Discovered pools are recorded in ``grove_univ4_pool_registry.json``. The
-registry retains the full history, while the oracle keeps only pools observed
-in a Kyber route during the previous seven days, up to ``MAX_V4_POOLS``. If
-none qualify, the most recently observed historical pool is retained.
+Discovered pools are recorded in ``grove_univ4_pool_registry.json`` and added
+to its active oracle selection while capacity remains. A pool is never removed
+merely because Kyber stops selecting it in a best route. Removing a pool is an
+intentional registry edit; the oracle itself rejects invalid pool configs and
+ignores pools that cannot contribute a usable quote.
 
 Examples:
 
-    ORACLE=0x... brownie run sync_kyber_v4_pools --network mainnet
-    ORACLE=0x... APPLY_REGISTRY=true \
+    brownie run sync_kyber_v4_pools --network mainnet
+    APPLY_REGISTRY=true \
         brownie run sync_kyber_v4_pools --network mainnet
-    ORACLE=0x... BROADCAST=true POOL_SETTER_ACCOUNT=pool-setter \
+    BROADCAST=true \
         brownie run sync_kyber_v4_pools --network mainnet
 """
 
@@ -34,14 +35,18 @@ from brownie import Contract, accounts, chain
 try:
     from scripts.grove_maintenance_common import (
         GROVE,
+        MAINNET_GROVE_APR_ORACLE,
+        MAINNET_GROVE_STRATEGY,
         SUPPORTED_QUOTE_TOKENS,
         ZERO_ADDRESS,
+        address_env,
         env_bool,
         fetch_kyber_route,
         load_authorized_account,
         normalize_hex,
         positive_int_env,
         require_mainnet,
+        validate_mainnet_deployment,
     )
     from scripts.grove_pool_registry import (
         GENERATED_CONFIG_PATH,
@@ -57,14 +62,18 @@ except ModuleNotFoundError as error:
         raise
     from grove_maintenance_common import (
         GROVE,
+        MAINNET_GROVE_APR_ORACLE,
+        MAINNET_GROVE_STRATEGY,
         SUPPORTED_QUOTE_TOKENS,
         ZERO_ADDRESS,
+        address_env,
         env_bool,
         fetch_kyber_route,
         load_authorized_account,
         normalize_hex,
         positive_int_env,
         require_mainnet,
+        validate_mainnet_deployment,
     )
     from grove_pool_registry import (
         GENERATED_CONFIG_PATH,
@@ -84,7 +93,6 @@ DEFAULT_QUOTE_AMOUNTS = (
     100_000 * 10**18,
 )
 CLIENT_ID = "grove-apr-oracle-pool-sync"
-POOL_RETENTION_SECONDS = 7 * 24 * 60 * 60
 
 ORACLE_ABI = [
     {
@@ -245,71 +253,13 @@ def _register_configured_pools(registry, configured_entries):
             )
 
 
-def _last_seen_timestamp(entry):
-    last_seen_at = entry.get("last_seen_at")
-    if not last_seen_at:
-        return None
-    try:
-        observed_at = datetime.fromisoformat(last_seen_at.replace("Z", "+00:00"))
-    except (TypeError, ValueError) as error:
-        raise RuntimeError(
-            "Invalid last_seen_at for {}: {}".format(
-                entry["pool_id"], last_seen_at
-            )
-        ) from error
-    if observed_at.tzinfo is None:
-        observed_at = observed_at.replace(tzinfo=timezone.utc)
-    return int(observed_at.timestamp())
-
-
 def _selected_pools(registry, route_pools, max_pools, current_timestamp):
-    active_order = {pool_id: index for index, pool_id in enumerate(route_pools)}
-    registry_order = {
-        entry["pool_id"]: index for index, entry in enumerate(registry["pools"])
-    }
-    cutoff = current_timestamp - POOL_RETENTION_SECONDS
-    recent_entries = []
-    observed_entries = []
-    for entry in registry["pools"]:
-        last_seen_timestamp = _last_seen_timestamp(entry)
-        if last_seen_timestamp is not None:
-            observed_entries.append((last_seen_timestamp, entry))
-        if last_seen_timestamp is not None and last_seen_timestamp >= cutoff:
-            recent_entries.append(entry)
-
-    if not recent_entries:
-        if observed_entries:
-            recent_entries = [
-                max(
-                    observed_entries,
-                    key=lambda observed: (
-                        observed[0],
-                        observed[1]["last_seen_block"],
-                        -registry_order[observed[1]["pool_id"]],
-                    ),
-                )[1]
-            ]
-        else:
-            configured_pool_ids = registry.get("oracle_pool_ids", [])
-            if configured_pool_ids:
-                entries_by_id = {
-                    entry["pool_id"]: entry for entry in registry["pools"]
-                }
-                recent_entries = [entries_by_id[configured_pool_ids[0]]]
-
-    def sort_key(entry):
-        pool_id = entry["pool_id"]
-        is_active = pool_id in active_order
-        return (
-            0 if is_active else 1,
-            active_order.get(pool_id, 0),
-            -(_last_seen_timestamp(entry) or 0),
-            -entry["last_seen_block"],
-            registry_order[pool_id],
-        )
-
-    ordered = sorted(recent_entries, key=sort_key)
-    return [entry["pool_id"] for entry in ordered[:max_pools]]
+    del current_timestamp  # Kept in the signature for callers and deterministic tests.
+    selected = list(registry.get("oracle_pool_ids", []))
+    for pool_id in route_pools:
+        if pool_id not in selected and len(selected) < max_pools:
+            selected.append(pool_id)
+    return selected[:max_pools]
 
 
 def _preserve_configured_order(configured_pools, selected_pools):
@@ -360,17 +310,13 @@ def sync_pools(
     )
     selected_pools = _preserve_configured_order(configured_pools, selected_pools)
     retained_pools = [pool for pool in selected_pools if pool not in seen]
-    cutoff = current_timestamp - POOL_RETENTION_SECONDS
-    stale_pools = []
-    for entry in registry["pools"]:
-        last_seen_timestamp = _last_seen_timestamp(entry)
-        if last_seen_timestamp is None or last_seen_timestamp < cutoff:
-            stale_pools.append(entry["pool_id"])
-    capacity_excluded_pools = [
+    historical_pools = [
         entry["pool_id"]
         for entry in registry["pools"]
         if entry["pool_id"] not in selected_pools
-        and entry["pool_id"] not in stale_pools
+    ]
+    capacity_excluded_pools = [
+        pool_id for pool_id in route_pools if pool_id not in selected_pools
     ]
     registry["oracle_pool_ids"] = selected_pools
     registry_would_change = serialized_registry(registry) != original_registry
@@ -387,18 +333,13 @@ def sync_pools(
     _print_pools("V4 GROVE/stable pools in Kyber best routes:", route_pools)
     if not route_pools:
         print("No compatible V4 first leg appeared in Kyber's best routes.")
-    _print_pools("Retained from registry history:", retained_pools)
+    _print_pools(
+        "Active registry pools retained without requiring a recent Kyber route:",
+        retained_pools,
+    )
     _print_pools("Selected for oracle:", selected_pools)
-    if stale_pools:
-        _print_pools("Not seen during the seven-day retention window:", stale_pools)
-    stale_retained_pools = [
-        pool_id for pool_id in selected_pools if pool_id in stale_pools
-    ]
-    if stale_retained_pools:
-        _print_pools(
-            "No recent pools found; retaining the most recent historical pool:",
-            stale_retained_pools,
-        )
+    if historical_pools:
+        _print_pools("Registry history not selected for oracle:", historical_pools)
     if capacity_excluded_pools:
         _print_pools(
             "Outside the {}-pool capacity:".format(max_pools),
@@ -411,22 +352,21 @@ def sync_pools(
 
     onchain_update_needed = configured_pools != selected_pools
     if not onchain_update_needed:
-        print("Oracle already matches the retained pool selection.")
+        print("Oracle already matches the active registry selection.")
     elif not broadcast:
         print(
-            "Dry run only. Re-run with BROADCAST=true and POOL_SETTER_ACCOUNT set "
-            "to apply the retained pool selection."
+            "Dry run only. Re-run with BROADCAST=true to apply the active "
+            "pool selection."
         )
     else:
         management = oracle.management()
         sender = load_authorized_account(
             accounts,
-            "POOL_SETTER_ACCOUNT",
             "oracle pool update",
             lambda address: address.lower() == management.lower()
             or oracle.poolSetters(address),
         )
-        print("Applying the retained pool selection from {}...".format(sender.address))
+        print("Applying the active registry selection from {}...".format(sender.address))
         transaction = oracle.setUniV4Pools(selected_pools, {"from": sender})
         print("  transaction: {}".format(transaction.txid))
 
@@ -473,9 +413,8 @@ def _quote_amounts():
 
 
 def main():
-    oracle_address = os.environ.get("ORACLE")
-    if not oracle_address:
-        raise RuntimeError("Set ORACLE to the deployed APR oracle address")
+    oracle_address = address_env("ORACLE", MAINNET_GROVE_APR_ORACLE)
+    strategy_address = address_env("STRATEGY", MAINNET_GROVE_STRATEGY)
 
     broadcast = env_bool("BROADCAST")
     apply_registry = env_bool("APPLY_REGISTRY")
@@ -483,6 +422,7 @@ def main():
     amounts_in = _quote_amounts()
     timeout = positive_int_env("KYBER_TIMEOUT", 30)
     oracle = _load_oracle(oracle_address)
+    validate_mainnet_deployment(Contract, oracle_address, strategy_address)
     route_summaries = []
     failures = []
     for amount_in in amounts_in:

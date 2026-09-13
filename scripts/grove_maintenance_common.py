@@ -15,6 +15,34 @@ SUPPORTED_QUOTE_TOKENS = {USDC.lower(), USDT.lower()}
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 KYBER_URL = "https://aggregator-api.kyberswap.com/ethereum/api/v1/routes"
 
+# Current Ethereum mainnet deployment. Environment variables with these names
+# remain available as explicit overrides for migrations and fork testing.
+MAINNET_GROVE_APR_ORACLE = "0xae71A2F0089fa802a55FcB2152BEF87A2C9Aadf9"
+MAINNET_GROVE_STRATEGY = "0xe060B80438771f13078048c3b0d930efECA6E622"
+YEARN_APR_ORACLE = "0x1981AD9F44F2EA9aDd2dC4AD7D075c102C70aF92"
+USDS_1_VAULT = "0x182863131F9a4630fF9E27830d945B1413e347E8"
+DEFAULT_BROWNIE_ACCOUNT = "llc2"
+
+YEARN_APR_ORACLE_ABI = [
+    {
+        "inputs": [{"name": "_strategy", "type": "address"}],
+        "name": "oracles",
+        "outputs": [{"type": "address"}],
+        "stateMutability": "view",
+        "type": "function",
+    }
+]
+
+YEARN_VAULT_ABI = [
+    {
+        "inputs": [],
+        "name": "get_default_queue",
+        "outputs": [{"type": "address[]"}],
+        "stateMutability": "view",
+        "type": "function",
+    }
+]
+
 
 def env_bool(name, default=False):
     value = os.environ.get(name, str(default).lower()).lower()
@@ -27,6 +55,13 @@ def positive_int_env(name, default):
     value = int(os.environ.get(name, default))
     if value <= 0:
         raise RuntimeError("{} must be positive".format(name))
+    return value
+
+
+def address_env(name, default):
+    value = os.environ.get(name, default).strip()
+    if not value:
+        raise RuntimeError("{} cannot be empty".format(name))
     return value
 
 
@@ -51,14 +86,50 @@ def format_price(price, unit="USDC"):
     return "{:.8f} {}/GROVE".format(price / 10**18, unit)
 
 
-def load_authorized_account(accounts, env_name, description, is_authorized):
-    account_name = os.environ.get(env_name)
-    if not account_name:
-        raise RuntimeError("Set {} to submit the {} transaction".format(env_name, description))
+def load_authorized_account(accounts, description, is_authorized):
+    account_name = os.environ.get("BROWNIE_ACCOUNT", DEFAULT_BROWNIE_ACCOUNT)
     sender = accounts.load(account_name)
     if not is_authorized(sender.address):
-        raise RuntimeError("{} is not authorized for {}".format(sender.address, description))
+        raise RuntimeError(
+            "Brownie account {} ({}) is not authorized for {}".format(
+                account_name, sender.address, description
+            )
+        )
     return sender
+
+
+def validate_mainnet_deployment(contract_factory, oracle_address, strategy_address):
+    """Verify the deployed strategy/oracle link and report USDS-1 queue status."""
+    yearn_oracle_address = address_env("YEARN_APR_ORACLE", YEARN_APR_ORACLE)
+    yearn_oracle = contract_factory.from_abi(
+        "YearnAprOracle", yearn_oracle_address, YEARN_APR_ORACLE_ABI
+    )
+    registered_oracle = normalize_hex(yearn_oracle.oracles(strategy_address))
+    expected_oracle = normalize_hex(oracle_address)
+    if registered_oracle != expected_oracle:
+        raise RuntimeError(
+            "Yearn APR oracle {} maps strategy {} to {}, expected {}".format(
+                yearn_oracle_address,
+                strategy_address,
+                registered_oracle,
+                expected_oracle,
+            )
+        )
+    print("Yearn APR registry: strategy is linked to the expected oracle.")
+
+    vault_address = address_env("USDS_1_VAULT", USDS_1_VAULT)
+    vault = contract_factory.from_abi("USDS1Vault", vault_address, YEARN_VAULT_ABI)
+    queue = [normalize_hex(address) for address in vault.get_default_queue()]
+    strategy_in_queue = normalize_hex(strategy_address) in queue
+    if strategy_in_queue:
+        print("USDS-1 queue: strategy is present.")
+    else:
+        print(
+            "WARNING: strategy {} is not in the USDS-1 default queue {}.".format(
+                strategy_address, vault_address
+            )
+        )
+    return strategy_in_queue
 
 
 def _tls_context():

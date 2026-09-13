@@ -28,18 +28,14 @@ contract GroveCompounderAprOracle {
     error AprTooHigh();
     error DuplicatePool();
     error HookedPool();
-    error InsufficientPoolLiquidity();
     error InvalidCurrencies();
+    error InvalidGrovePrice();
     error InvalidManagement();
-    error InvalidManualPrice();
     error InvalidPool();
     error InvalidPoolCount();
     error InvalidPoolId();
     error InvalidPoolSetter();
     error InvalidPriceSetter();
-    error LivePriceAvailable();
-    error LivePriceTooFarFromExpected(uint256 livePrice, uint256 expectedPrice);
-    error LivePriceTooFar(uint256 livePrice, uint256 storedPrice);
     error InvalidTickSpacing();
     error UnauthorizedManagement();
     error UnauthorizedPoolSetter();
@@ -50,7 +46,15 @@ contract GroveCompounderAprOracle {
     event UniV4PoolsSet(bytes32[] poolIds);
     event PoolSetterSet(address indexed poolSetter, bool allowed);
     event PriceSetterSet(address indexed priceSetter, bool allowed);
-    event StoredGrovePriceUpdated(uint256 previousPrice, uint256 newPrice, bool manual, uint256 timestamp);
+    event StoredGrovePriceUpdated(uint256 previousPrice, uint256 newPrice, uint256 timestamp);
+
+    enum GrovePriceStatus {
+        Unavailable,
+        FreshStoredPrice,
+        LiveV4,
+        StaleStoredPrice,
+        DecayingStoredPrice
+    }
 
     struct UniV4PoolConfig {
         bytes32 poolId;
@@ -98,8 +102,10 @@ contract GroveCompounderAprOracle {
     uint256 public constant MAX_V4_POOLS = 10;
     uint256 internal constant MAX_V4_POOL_PRICE_DEVIATION_BPS = 1_000;
     uint256 public constant MAX_LIVE_PRICE_DEVIATION_BPS = 5_000;
-    uint256 public constant MAX_CONFIRMED_PRICE_DEVIATION_BPS = 500;
     uint256 public constant MAX_EXPECTED_APR = 5e17;
+    uint256 public constant STORED_PRICE_VALIDITY = 72 hours;
+    uint256 public constant STORED_PRICE_DECAY_START = 7 days;
+    uint256 public constant STORED_PRICE_DECAY_END = 14 days;
 
     address public management;
     mapping(address => bool) public poolSetters;
@@ -108,7 +114,6 @@ contract GroveCompounderAprOracle {
 
     uint256 public storedGrovePrice;
     uint64 public lastPriceUpdate;
-    bool public storedPriceIsManual;
 
     modifier onlyManagement() {
         _onlyManagement();
@@ -144,8 +149,11 @@ contract GroveCompounderAprOracle {
 
     /**
      * @dev The strategy parameter is unused because all strategies share the staking rewards.
-     *      APR uses a sane live V4 price when available and otherwise retains the
-     *      last stored price without expiring it.
+     *      APR uses a recently submitted reference price first. Once that price
+     *      is more than 72 hours old, it falls back to a sane live V4 price. If
+     *      V4 is unavailable, the stored price remains whole through day seven,
+     *      decays linearly to zero from day seven through day fourteen, and is
+     *      zero thereafter.
      * @param _delta The proposed change in staked USDS.
      * @return oracleApr Expected APR represented as 1e18.
      */
@@ -191,45 +199,13 @@ contract GroveCompounderAprOracle {
     }
 
     /**
-     * @notice Store the current V4 price when it is within 50% of the stored reference.
+     * @notice Store the trusted offchain GROVE/stablecoin reference price.
+     * @dev `_price` is stablecoin per GROVE, scaled to 1e18. The price setter may
+     *      update this reference whether or not a live V4 quote is available.
      */
-    function refreshStoredGrovePrice() external onlyPoolSetter returns (uint256 livePrice) {
-        (bool valid, uint256 price) = _tryGrovePrice();
-        if (!valid) revert InsufficientPoolLiquidity();
-
-        uint256 storedPrice = storedGrovePrice;
-        if (storedPrice != 0 && !_withinLivePriceBound(price, storedPrice)) {
-            revert LivePriceTooFar(price, storedPrice);
-        }
-
-        _storeGrovePrice(price, false);
-        return price;
-    }
-
-    /**
-     * @notice Explicitly accept the current V4 price after human review of `_expectedPrice`.
-     * @dev This bypasses only the 50% stored-price sanity bound. The execution-time
-     *      onchain quote must remain within 5% of the reviewed price.
-     */
-    function confirmLiveGrovePrice(uint256 _expectedPrice) external onlyPriceSetter returns (uint256 livePrice) {
-        (bool valid, uint256 price) = _tryGrovePrice();
-        if (!valid) revert InsufficientPoolLiquidity();
-        if (!_withinPriceBound(price, _expectedPrice, MAX_CONFIRMED_PRICE_DEVIATION_BPS)) {
-            revert LivePriceTooFarFromExpected(price, _expectedPrice);
-        }
-        _storeGrovePrice(price, false);
-        return price;
-    }
-
-    /**
-     * @notice Store an already-conservative manually sourced price.
-     * @dev The trusted maintenance script, not this contract, applies the haircut.
-     */
-    function setManualGrovePrice(uint256 _price) external onlyPriceSetter {
-        if (_price == 0) revert InvalidManualPrice();
-        (bool livePriceAvailable,) = _tryGrovePrice();
-        if (livePriceAvailable) revert LivePriceAvailable();
-        _storeGrovePrice(_price, true);
+    function setGrovePrice(uint256 _price) external onlyPriceSetter {
+        if (_price == 0) revert InvalidGrovePrice();
+        _storeGrovePrice(_price);
     }
 
     function setUniV4Pools(bytes32[] calldata _poolIds) external onlyPoolSetter {
@@ -286,14 +262,40 @@ contract GroveCompounderAprOracle {
      * @notice Return the price currently used by the APR calculation and whether it is live.
      */
     function grovePrice() external view returns (uint256 price, bool usingLivePrice) {
+        GrovePriceStatus status;
+        (price, status) = _selectedGrovePrice();
+        usingLivePrice = status == GrovePriceStatus.LiveV4;
+    }
+
+    /**
+     * @notice Return the selected price together with its precise fallback state.
+     */
+    function grovePriceWithStatus() external view returns (uint256 price, GrovePriceStatus status) {
         return _selectedGrovePrice();
     }
 
-    function _selectedGrovePrice() internal view returns (uint256 price, bool usingLivePrice) {
-        (bool valid, uint256 livePrice) = _tryGrovePrice();
+    function _selectedGrovePrice() internal view returns (uint256 price, GrovePriceStatus status) {
         uint256 storedPrice = storedGrovePrice;
-        usingLivePrice = valid && (storedPrice == 0 || _withinLivePriceBound(livePrice, storedPrice));
-        price = usingLivePrice ? livePrice : storedPrice;
+        if (storedPrice == 0) {
+            (bool initialLiveValid, uint256 initialLivePrice) = _tryGrovePrice();
+            if (initialLiveValid) return (initialLivePrice, GrovePriceStatus.LiveV4);
+            return (0, GrovePriceStatus.Unavailable);
+        }
+
+        uint256 age = block.timestamp - lastPriceUpdate;
+        if (age <= STORED_PRICE_VALIDITY) return (storedPrice, GrovePriceStatus.FreshStoredPrice);
+
+        (bool valid, uint256 livePrice) = _tryGrovePrice();
+        if (valid && _withinLivePriceBound(livePrice, storedPrice)) {
+            return (livePrice, GrovePriceStatus.LiveV4);
+        }
+        if (age <= STORED_PRICE_DECAY_START) return (storedPrice, GrovePriceStatus.StaleStoredPrice);
+        if (age < STORED_PRICE_DECAY_END) {
+            uint256 remaining = STORED_PRICE_DECAY_END - age;
+            price = FullMath.mulDiv(storedPrice, remaining, STORED_PRICE_DECAY_END - STORED_PRICE_DECAY_START);
+            return (price, GrovePriceStatus.DecayingStoredPrice);
+        }
+        return (0, GrovePriceStatus.Unavailable);
     }
 
     function _tryGrovePrice() internal view returns (bool valid, uint256 price) {
@@ -302,12 +304,11 @@ contract GroveCompounderAprOracle {
         return (true, FullMath.mulDiv(route.totalAmountOut, 1e30, GROVE_PRICE_QUOTE_AMOUNT));
     }
 
-    function _storeGrovePrice(uint256 price, bool manual) internal {
+    function _storeGrovePrice(uint256 price) internal {
         uint256 previousPrice = storedGrovePrice;
         storedGrovePrice = price;
         lastPriceUpdate = uint64(block.timestamp);
-        storedPriceIsManual = manual;
-        emit StoredGrovePriceUpdated(previousPrice, price, manual, block.timestamp);
+        emit StoredGrovePriceUpdated(previousPrice, price, block.timestamp);
     }
 
     function _withinLivePriceBound(uint256 livePrice, uint256 storedPrice) internal pure returns (bool) {

@@ -7,6 +7,12 @@ import {GroveUniV4PoolConfig} from "script/GroveUniV4PoolConfig.sol";
 import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 
+// HISTORICAL DEPLOYMENT SCRIPT — DO NOT REUSE.
+// This script deployed:
+//   GroveCompounderAprOracle: 0xED85bB86BDef06EF7312eD1bd3f80A4C2f957f56
+//   GroveCompounder strategy: 0xe060B80438771f13078048c3b0d930efECA6E622
+// The replacement oracle is deployed with DeployOracleV2.s.sol.
+
 // ---- Usage ----
 // First verify that the generated deployment snapshot matches its JSON source:
 // python3 scripts/generate_grove_pool_config.py --check
@@ -27,7 +33,8 @@ contract DeployStrategyAndOracle is Script {
 
         GroveCompounderAprOracle aprOracle = new GroveCompounderAprOracle();
         aprOracle.setUniV4Pools(GroveUniV4PoolConfig.initialPools());
-        aprOracle.refreshStoredGrovePrice();
+        // The historical oracle called refreshStoredGrovePrice() here.
+        // V2 reference prices are submitted with refresh_grove_price.py.
 
         console2.log("-----------------------------");
         console2.log("apr oracle deployed at: %s", address(aprOracle));
@@ -42,6 +49,3 @@ contract DeployStrategyAndOracle is Script {
         vm.stopBroadcast();
     }
 }
-
-// apr oracle deployed at:
-// strategy deployed at:

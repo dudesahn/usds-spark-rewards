@@ -218,20 +218,16 @@ contract OracleTest is Test {
         oracle.setPriceSetter(user, true);
         assertTrue(oracle.priceSetters(user));
 
-        _setPoolCount(1);
-        _mockIncompletePool(POOL_ONE);
-
         vm.prank(user);
-        oracle.setManualGrovePrice(1e18);
+        oracle.setGrovePrice(1e18);
         assertEq(oracle.storedGrovePrice(), 1e18);
-        assertTrue(oracle.storedPriceIsManual());
 
         oracle.setPriceSetter(user, false);
         assertFalse(oracle.priceSetters(user));
 
         vm.prank(user);
         vm.expectRevert(GroveCompounderAprOracle.UnauthorizedPriceSetter.selector);
-        oracle.setManualGrovePrice(1e18);
+        oracle.setGrovePrice(1e18);
     }
 
     function test_cannotConfigureMoreThanMaximumPools() public {
@@ -434,168 +430,129 @@ contract OracleTest is Test {
         (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
         assertEq(selectedPrice, 0);
         assertFalse(usingLivePrice);
+        GroveCompounderAprOracle.GrovePriceStatus status;
+        (selectedPrice, status) = oracle.grovePriceWithStatus();
+        assertEq(selectedPrice, 0);
+        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.Unavailable));
 
         _mockActiveRewards();
         assertEq(oracle.aprAfterDebtChange(address(0), 0), 0);
     }
 
-    function test_refreshRequiresCompleteLiveRoute() public {
-        _setPoolCount(1);
-        _mockIncompletePool(POOL_ONE);
-
-        vm.expectRevert(GroveCompounderAprOracle.InsufficientPoolLiquidity.selector);
-        oracle.refreshStoredGrovePrice();
-    }
-
-    function test_onlyPoolSetterCanRefreshStoredPrice() public {
-        _setMockedSinglePoolPrice(10_000);
-
-        vm.prank(user);
-        vm.expectRevert(GroveCompounderAprOracle.UnauthorizedPoolSetter.selector);
-        oracle.refreshStoredGrovePrice();
-    }
-
-    function test_refreshInitializesStoredPrice() public {
-        uint256 livePrice = _setMockedSinglePoolPrice(10_000);
-        uint256 refreshedPrice = oracle.refreshStoredGrovePrice();
-
-        assertEq(refreshedPrice, livePrice);
-        assertEq(oracle.storedGrovePrice(), livePrice);
-        assertEq(oracle.lastPriceUpdate(), block.timestamp);
-        assertFalse(oracle.storedPriceIsManual());
-
-        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
-        assertEq(selectedPrice, livePrice);
-        assertTrue(usingLivePrice);
-    }
-
-    function test_manualPriceRejectsZeroAndCompleteLiveRoute() public {
-        _setMockedSinglePoolPrice(10_000);
-
-        vm.expectRevert(GroveCompounderAprOracle.InvalidManualPrice.selector);
-        oracle.setManualGrovePrice(0);
-
-        vm.expectRevert(GroveCompounderAprOracle.LivePriceAvailable.selector);
-        oracle.setManualGrovePrice(1e18);
-    }
-
-    function test_manualPriceStoresAlreadyHaircutValueExactly() public {
-        _setPoolCount(1);
-        _mockIncompletePool(POOL_ONE);
-        uint256 scriptHaircutPrice = 0.95e18;
-
-        oracle.setManualGrovePrice(scriptHaircutPrice);
-
-        assertEq(oracle.storedGrovePrice(), scriptHaircutPrice);
-        assertEq(oracle.lastPriceUpdate(), block.timestamp);
-        assertTrue(oracle.storedPriceIsManual());
-    }
-
-    function test_storedFallbackNeverExpires() public {
-        uint256 livePrice = _setMockedSinglePoolPrice(10_000);
-        oracle.refreshStoredGrovePrice();
-        _mockIncompletePool(POOL_ONE);
-
-        vm.warp(block.timestamp + 365 days);
-        _mockActiveRewards();
-
-        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
-        assertEq(selectedPrice, livePrice);
-        assertFalse(usingLivePrice);
-        assertEq(oracle.aprAfterDebtChange(address(0), 0), (1e18 * 31_536_000 * livePrice) / 1e50);
-    }
-
-    function test_aprUsesSaneLivePriceInsteadOfStoredPrice() public {
-        uint256 storedPrice = _setMockedSinglePoolPrice(10_000);
-        oracle.refreshStoredGrovePrice();
-        _mockPool(POOL_ONE, uint160((uint256(1 << 96) * 110) / 100), 0, 1e24, 10_000);
-        (,, uint256 livePrice,,,) = oracle.quoteUniV4Route();
-        assertLt(_deviationBps(livePrice, storedPrice), oracle.MAX_LIVE_PRICE_DEVIATION_BPS());
-
-        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
-        assertEq(selectedPrice, livePrice);
-        assertTrue(usingLivePrice);
-    }
-
-    function test_aprIgnoresMassiveLiveMoveAndUsesStoredPrice() public {
-        uint256 storedPrice = _setMockedSinglePoolPrice(10_000);
-        oracle.refreshStoredGrovePrice();
-        _mockPool(POOL_ONE, uint160(uint256(1 << 96) * 2), 0, 1e24, 10_000);
-        (,, uint256 livePrice,,,) = oracle.quoteUniV4Route();
-        assertGt(_deviationBps(livePrice, storedPrice), oracle.MAX_LIVE_PRICE_DEVIATION_BPS());
-
-        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
-        assertEq(selectedPrice, storedPrice);
-        assertFalse(usingLivePrice);
-
-        _mockActiveRewards();
-        assertEq(oracle.aprAfterDebtChange(address(0), 0), (1e18 * 31_536_000 * storedPrice) / 1e50);
-    }
-
-    function test_refreshRejectsMassiveLiveMove() public {
-        uint256 storedPrice = _setMockedSinglePoolPrice(10_000);
-        oracle.refreshStoredGrovePrice();
-        _mockPool(POOL_ONE, uint160(uint256(1 << 96) * 2), 0, 1e24, 10_000);
-        (,, uint256 livePrice,,,) = oracle.quoteUniV4Route();
-
-        vm.expectRevert(
-            abi.encodeWithSelector(GroveCompounderAprOracle.LivePriceTooFar.selector, livePrice, storedPrice)
-        );
-        oracle.refreshStoredGrovePrice();
-    }
-
-    function test_priceSetterCanConfirmReviewedMassiveLiveMove() public {
-        _setMockedSinglePoolPrice(10_000);
-        oracle.refreshStoredGrovePrice();
-        _mockPool(POOL_ONE, uint160(uint256(1 << 96) * 2), 0, 1e24, 10_000);
-        (,, uint256 livePrice,,,) = oracle.quoteUniV4Route();
-        uint256 reviewedPrice = livePrice + ((livePrice * 400) / 10_000);
-
+    function test_onlyPriceSetterCanSetStoredPrice() public {
         vm.prank(user);
         vm.expectRevert(GroveCompounderAprOracle.UnauthorizedPriceSetter.selector);
-        oracle.confirmLiveGrovePrice(reviewedPrice);
+        oracle.setGrovePrice(1e18);
 
-        oracle.setPriceSetter(user, true);
-        vm.prank(user);
-        assertEq(oracle.confirmLiveGrovePrice(reviewedPrice), livePrice);
-        assertEq(oracle.storedGrovePrice(), livePrice);
-        assertFalse(oracle.storedPriceIsManual());
+        vm.expectRevert(GroveCompounderAprOracle.InvalidGrovePrice.selector);
+        oracle.setGrovePrice(0);
+    }
+
+    function test_priceSetterStoresRawReferenceEvenWhenV4IsAvailable() public {
+        _setMockedSinglePoolPrice(10_000);
+        uint256 referencePrice = 0.0078e18;
+        oracle.setGrovePrice(referencePrice);
+
+        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
+        assertEq(oracle.storedGrovePrice(), referencePrice);
+        assertEq(oracle.lastPriceUpdate(), block.timestamp);
+        assertEq(selectedPrice, referencePrice);
+        assertFalse(usingLivePrice);
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
+        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.FreshStoredPrice));
+    }
+
+    function test_freshStoredReferenceWinsThrough72Hours() public {
+        uint256 referencePrice = 0.0078e18;
+        oracle.setGrovePrice(referencePrice);
+        uint256 livePrice = _setMockedSinglePoolPrice(10_000);
+        assertTrue(livePrice != referencePrice);
+
+        vm.warp(block.timestamp + oracle.STORED_PRICE_VALIDITY());
+        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
+        assertEq(selectedPrice, referencePrice);
+        assertFalse(usingLivePrice);
+    }
+
+    function test_validV4BecomesFallbackAfter72Hours() public {
+        uint256 livePrice = _setMockedSinglePoolPrice(10_000);
+        uint256 referencePrice = livePrice + ((livePrice * 1_000) / 10_000);
+        oracle.setGrovePrice(referencePrice);
+
+        vm.warp(block.timestamp + oracle.STORED_PRICE_VALIDITY() + 1);
+        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
+        assertEq(selectedPrice, livePrice);
+        assertTrue(usingLivePrice);
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
+        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.LiveV4));
+    }
+
+    function test_outOfBoundsV4UsesStoredFallback() public {
+        uint256 referencePrice = _setMockedSinglePoolPrice(10_000);
+        oracle.setGrovePrice(referencePrice);
+        _mockPool(POOL_ONE, uint160(uint256(1 << 96) * 2), 0, 1e24, 10_000);
+        (,, uint256 livePrice,,,) = oracle.quoteUniV4Route();
+        assertGt(_deviationBps(livePrice, referencePrice), oracle.MAX_LIVE_PRICE_DEVIATION_BPS());
+
+        vm.warp(block.timestamp + oracle.STORED_PRICE_VALIDITY() + 1);
+
+        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
+        assertEq(selectedPrice, referencePrice);
+        assertFalse(usingLivePrice);
+    }
+
+    function test_unavailableV4KeepsFullStoredPriceThroughDaySeven() public {
+        uint256 referencePrice = 0.0078e18;
+        oracle.setGrovePrice(referencePrice);
+        _setPoolCount(1);
+        _mockIncompletePool(POOL_ONE);
+
+        vm.warp(block.timestamp + oracle.STORED_PRICE_DECAY_START());
+        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
+        assertEq(selectedPrice, referencePrice);
+        assertFalse(usingLivePrice);
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
+        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.StaleStoredPrice));
+    }
+
+    function test_storedPriceDecaysLinearlyFromDaySevenToDayFourteen() public {
+        uint256 referencePrice = 0.008e18;
+        oracle.setGrovePrice(referencePrice);
+        _setPoolCount(1);
+        _mockIncompletePool(POOL_ONE);
+
+        vm.warp(block.timestamp + 10 days + 12 hours);
+        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
+        assertEq(selectedPrice, referencePrice / 2);
+        assertFalse(usingLivePrice);
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
+        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.DecayingStoredPrice));
+    }
+
+    function test_storedPriceIsZeroAtDayFourteenWithoutV4() public {
+        oracle.setGrovePrice(0.008e18);
+        _setPoolCount(1);
+        _mockIncompletePool(POOL_ONE);
+
+        vm.warp(block.timestamp + oracle.STORED_PRICE_DECAY_END());
+        (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
+        assertEq(selectedPrice, 0);
+        assertFalse(usingLivePrice);
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
+        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.Unavailable));
+
+        _mockActiveRewards();
+        assertEq(oracle.aprAfterDebtChange(address(0), 0), 0);
+    }
+
+    function test_validV4StillWorksAfterDayFourteen() public {
+        uint256 livePrice = _setMockedSinglePoolPrice(10_000);
+        oracle.setGrovePrice(livePrice);
+        vm.warp(block.timestamp + oracle.STORED_PRICE_DECAY_END());
 
         (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
         assertEq(selectedPrice, livePrice);
         assertTrue(usingLivePrice);
-    }
-
-    function test_priceSetterCannotConfirmPriceThatDriftedFromReview() public {
-        _setMockedSinglePoolPrice(10_000);
-        oracle.refreshStoredGrovePrice();
-        _mockPool(POOL_ONE, uint160(uint256(1 << 96) * 2), 0, 1e24, 10_000);
-        (,, uint256 livePrice,,,) = oracle.quoteUniV4Route();
-        uint256 reviewedPrice = livePrice + ((livePrice * 600) / 10_000);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                GroveCompounderAprOracle.LivePriceTooFarFromExpected.selector, livePrice, reviewedPrice
-            )
-        );
-        oracle.confirmLiveGrovePrice(reviewedPrice);
-    }
-
-    function test_confirmLiveGrovePriceSignatureBindsExpectedPrice() public {
-        assertEq(
-            GroveCompounderAprOracle.confirmLiveGrovePrice.selector, bytes4(keccak256("confirmLiveGrovePrice(uint256)"))
-        );
-    }
-
-    function test_onchainRefreshReplacesManualPriceSource() public {
-        uint256 livePrice = _setMockedSinglePoolPrice(10_000);
-        _mockIncompletePool(POOL_ONE);
-        oracle.setManualGrovePrice(livePrice);
-        assertTrue(oracle.storedPriceIsManual());
-
-        _mockPool(POOL_ONE, uint160(1 << 96), 0, 1e24, 10_000);
-        oracle.refreshStoredGrovePrice();
-        assertFalse(oracle.storedPriceIsManual());
     }
 
     function test_aprUsesSplitRoutePriceAndRemainsStaticCallable() public {
@@ -605,7 +562,7 @@ contract OracleTest is Test {
         _mockActiveRewards();
 
         (,, uint256 price,,,) = oracle.quoteUniV4Route();
-        oracle.refreshStoredGrovePrice();
+        oracle.setGrovePrice(price);
         uint256 expectedApr = (1e18 * 31_536_000 * price) / 1e50;
 
         (bool success, bytes memory data) = address(oracle)
@@ -619,7 +576,8 @@ contract OracleTest is Test {
         _mockIdenticalPool(POOL_ONE);
         _mockIdenticalPool(POOL_TWO);
         _mockActiveRewards();
-        oracle.refreshStoredGrovePrice();
+        (,, uint256 price,,,) = oracle.quoteUniV4Route();
+        oracle.setGrovePrice(price);
 
         address strategy = address(0x1234);
         AprOracle registry = new AprOracle(address(this));
@@ -633,7 +591,8 @@ contract OracleTest is Test {
         _mockIdenticalPool(POOL_ONE);
         _mockIdenticalPool(POOL_TWO);
         _mockActiveRewards();
-        oracle.refreshStoredGrovePrice();
+        (,, uint256 price,,,) = oracle.quoteUniV4Route();
+        oracle.setGrovePrice(price);
 
         uint256 currentApr = oracle.aprAfterDebtChange(address(0), 0);
         uint256 lowerDebtApr = oracle.aprAfterDebtChange(address(0), -1e49);
@@ -648,7 +607,8 @@ contract OracleTest is Test {
         _mockIdenticalPool(POOL_ONE);
         _mockIdenticalPool(POOL_TWO);
         _mockActiveRewards();
-        oracle.refreshStoredGrovePrice();
+        (,, uint256 price,,,) = oracle.quoteUniV4Route();
+        oracle.setGrovePrice(price);
         vm.mockCall(oracle.STAKING(), abi.encodeWithSelector(IStaking.totalSupply.selector), abi.encode(uint256(1e18)));
 
         vm.expectRevert(GroveCompounderAprOracle.AprTooHigh.selector);
