@@ -5,6 +5,8 @@ This script is intended to run around twice per day. It always obtains an
 unrestricted 100,000 GROVE Kyber quote and stores the raw per-GROVE price when
 the reference is uninitialized, at least 36 hours old, or at least 10% away
 from the new quote. A move over 50% requires interactive confirmation.
+Additional 500,000 and 1,000,000 GROVE quotes show total proceeds and the
+average price for comparison; they do not set the reference or auction floor.
 
 The script also monitors the oracle's 10,000 GROVE Uniswap V4 fallback, prints
 the effective onchain price/status/APR, and offers an auction-floor update when
@@ -103,6 +105,26 @@ def _kyber_quote_amount():
         "KYBER_QUOTE_AMOUNT", DEFAULT_KYBER_QUOTE_GROVE
     )
     return grove_amount * 10**18
+
+
+
+def _print_kyber_comparison_quotes(reference_amount):
+    timeout = positive_int_env("KYBER_TIMEOUT", 30)
+    for grove_amount in (500_000, 1_000_000):
+        amount_in = grove_amount * 10**18
+        if amount_in == reference_amount:
+            continue  # Already printed as the operator-selected reference quote.
+        try:
+            price, route = _fetch_kyber_price(amount_in, timeout)
+            print(
+                "Kyber comparison: {:,} GROVE -> {:,.6f} USDC ({})".format(
+                    grove_amount, int(route["amountOut"]) / 10**6, _format_price(price)
+                )
+            )
+        except Exception as error:
+            print("WARNING: Kyber comparison failed for {:,} GROVE: {}".format(
+                grove_amount, error
+            ))
 
 
 def _interactive_confirm(message):
@@ -285,9 +307,11 @@ def main():
     else:
         print("Stored reference: not initialized")
 
+    reference_amount = _kyber_quote_amount()
     kyber_price, kyber_source = _refresh_from_kyber(
-        oracle, _kyber_quote_amount(), stored_price, age, broadcast
+        oracle, reference_amount, stored_price, age, broadcast
     )
+    _print_kyber_comparison_quotes(reference_amount)
 
     route = oracle.quoteUniV4Route()
     amount_allocated = int(route[1])

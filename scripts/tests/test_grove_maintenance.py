@@ -366,6 +366,48 @@ class MaintenancePolicyTest(unittest.TestCase):
                 100_000 * 10**18,
             )
 
+    def test_comparison_quotes_do_not_change_reference_or_block_maintenance(self):
+        for comparison_fails in (False, True):
+            with self.subTest(comparison_fails=comparison_fails):
+                oracle = FakePriceOracle()
+                oracle.GROVE_PRICE_QUOTE_AMOUNT = lambda: 10_000 * 10**18
+                oracle.storedGrovePrice = lambda: 0
+                oracle.lastPriceUpdate = lambda: 0
+                oracle.quoteUniV4Route = lambda: (0, 0, 0)
+                reference_price = 8 * 10**15
+                sender = object()
+                amounts = []
+
+                def fetch_price(amount, timeout):
+                    amounts.append(amount // 10**18)
+                    if comparison_fails and amount == 500_000 * 10**18:
+                        raise RuntimeError("HTTP 503")
+                    price = reference_price if amount == 100_000 * 10**18 else 6 * 10**15
+                    return price, {"amountIn": str(amount), "amountOut": str(amount * price // 10**30)}
+
+                with (
+                    patch.dict(os.environ, {"BROADCAST": "true"}, clear=True),
+                    patch.object(price_script, "_load_oracle", return_value=oracle),
+                    patch.object(price_script, "validate_mainnet_deployment"),
+                    patch.object(price_script, "_fetch_kyber_price", side_effect=fetch_price),
+                    patch.object(price_script, "_load_authorized_account", return_value=sender),
+                    patch.object(price_script, "_print_oracle_status"),
+                    patch.object(price_script, "_review_auction_floor") as review_floor,
+                    patch("builtins.print") as output,
+                ):
+                    self.assertTrue(price_script.main())
+
+                self.assertEqual(amounts, [100_000, 500_000, 1_000_000])
+                self.assertEqual(oracle.price_calls, [(reference_price, {"from": sender})])
+                review_floor.assert_called_once_with(
+                    price_script.MAINNET_GROVE_STRATEGY, reference_price,
+                    "Kyber executable reference", True,
+                )
+                messages = [call.args[0] for call in output.call_args_list if call.args]
+                self.assertTrue(any("1,000,000 GROVE -> 6,000.000000 USDC (0.00600000 USDC/GROVE)" in message for message in messages))
+                if comparison_fails:
+                    self.assertTrue(any("comparison failed for 500,000 GROVE" in message for message in messages))
+
     def test_kyber_price_quote_amount_can_be_overridden_in_grove_units(self):
         with patch.dict(
             os.environ, {"KYBER_QUOTE_AMOUNT": "250000"}, clear=True
