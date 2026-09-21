@@ -83,6 +83,12 @@
       "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       "last_seen_block": 0,
       "last_seen_at": null
+    },
+    {
+      "pool_id": "0x0196d365448c076bec48dbf99a5575c1f081ae89a23de1fdaee1d5934c0b9699",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 26006032,
+      "last_seen_at": "2026-09-18T17:58:41Z"
     }
   ]
 }
