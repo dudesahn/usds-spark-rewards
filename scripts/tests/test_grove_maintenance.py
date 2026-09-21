@@ -4,7 +4,7 @@ import os
 import sys
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 if "brownie" not in sys.modules:
@@ -12,7 +12,15 @@ if "brownie" not in sys.modules:
     brownie.Contract = object()
     brownie.accounts = object()
     brownie.chain = types.SimpleNamespace(id=1, height=123, time=lambda: 456)
+    brownie.network = types.ModuleType("brownie.network")
+    brownie.network.contract = types.ModuleType("brownie.network.contract")
+    brownie.network.contract._add_deployment = Mock()
     sys.modules["brownie"] = brownie
+    sys.modules["brownie.network"] = brownie.network
+    sys.modules["brownie.network.contract"] = brownie.network.contract
+    brownie._config = types.ModuleType("brownie._config")
+    brownie._config.CONFIG = types.SimpleNamespace(settings={"autofetch_sources": False})
+    sys.modules["brownie._config"] = brownie._config
 
 if "click" not in sys.modules:
     click = types.ModuleType("click")
@@ -71,9 +79,6 @@ class FakeStrategy:
     def minimumAuctionPrice(self):
         return self.floor
 
-    def management(self):
-        return "0x0000000000000000000000000000000000000002"
-
     def setMinimumAuctionPrice(self, price, transaction):
         self.floor_updates.append((price, transaction))
         return types.SimpleNamespace(txid="0xfloor")
@@ -92,6 +97,142 @@ class FakeAuction:
 
 
 class MaintenancePolicyTest(unittest.TestCase):
+    def test_uncached_contract_fetches_with_autofetch_initially_disabled(self):
+        from brownie._config import CONFIG
+        from brownie.network import contract as contract_module
+
+        auction = FakeAuction(60 * 10**14, False)
+
+        def uncached_contract(address):
+            if not CONFIG.settings["autofetch_sources"]:
+                raise ValueError("Unknown contract address: '{}'".format(address))
+            contract_module._add_deployment(auction)
+            return auction
+
+        factory = Mock(side_effect=uncached_contract)
+        with patch.dict(CONFIG.settings, {"autofetch_sources": False}):
+            with patch.object(contract_module, "_add_deployment") as writer:
+                loaded = common_module.load_contract(
+                    factory, "0xauction", ("minimumPrice", "isAnActiveAuction")
+                )
+                self.assertIs(loaded, auction)
+                writer.assert_not_called()
+            self.assertFalse(CONFIG.settings["autofetch_sources"])
+        factory.assert_called_once_with("0xauction")
+        factory.from_explorer.assert_not_called()
+
+    def test_autofetch_setting_restored_when_explorer_fails(self):
+        from brownie._config import CONFIG
+
+        def unavailable_explorer(address):
+            self.assertTrue(CONFIG.settings["autofetch_sources"])
+            raise RuntimeError("explorer unavailable")
+
+        with patch.dict(CONFIG.settings, {"autofetch_sources": False}):
+            with self.assertRaisesRegex(RuntimeError, "explorer unavailable"):
+                common_module.load_contract(
+                    unavailable_explorer, "0xauction", ("minimumPrice",)
+                )
+            self.assertFalse(CONFIG.settings["autofetch_sources"])
+
+    def test_canonical_loader_blocks_cache_inserts_and_restores_writer(self):
+        from brownie.network import contract as contract_module
+
+        contract = types.SimpleNamespace(management=lambda: "0xmanager")
+
+        def cached_or_fetched(address):
+            contract_module._add_deployment(contract)
+            return contract
+
+        factory = Mock(side_effect=cached_or_fetched)
+        with patch.object(contract_module, "_add_deployment") as writer:
+            self.assertIs(
+                common_module.load_contract(factory, "0xstrategy", ("management",)),
+                contract,
+            )
+            writer.assert_not_called()
+            self.assertIs(contract_module._add_deployment, writer)
+        factory.assert_called_once_with("0xstrategy")
+        factory.from_explorer.assert_not_called()
+
+    def test_strategy_override_blocks_recursive_cache_inserts(self):
+        from brownie.network import contract as contract_module
+
+        contract = FakeStrategy(1)
+
+        def explorer(address, **kwargs):
+            self.assertEqual(kwargs, {"as_proxy_for": address, "persist": False})
+            # Model Brownie's recursive fallback forgetting persist=False.
+            contract_module._add_deployment(contract)
+            return contract
+
+        factory = Mock()
+        factory.from_explorer.side_effect = explorer
+        with patch.object(contract_module, "_add_deployment") as writer:
+            self.assertIs(
+                common_module.load_contract(
+                    factory, "0xstrategy", ("auction",), strategy=True
+                ), contract,
+            )
+            writer.assert_not_called()
+            self.assertIs(contract_module._add_deployment, writer)
+        factory.assert_not_called()
+        factory.from_abi.assert_not_called()
+
+    def test_failed_load_restores_cache_writer_without_an_abi_fallback(self):
+        from brownie.network import contract as contract_module
+
+        factory = Mock(side_effect=RuntimeError("metadata unavailable"))
+        with patch.object(contract_module, "_add_deployment") as writer:
+            with self.assertRaisesRegex(RuntimeError, "metadata unavailable"):
+                common_module.load_contract(factory, "0xoracle", ("setGrovePrice",))
+            self.assertIs(contract_module._add_deployment, writer)
+            writer.assert_not_called()
+        factory.from_explorer.assert_not_called()
+        factory.from_abi.assert_not_called()
+
+    def test_missing_method_reports_address_name_and_method_without_fallback(self):
+        factory = Mock(return_value=types.SimpleNamespace(_name="CachedOracle"))
+        with self.assertRaisesRegex(
+            RuntimeError, "0xoracle: resolved CachedOracle; missing setGrovePrice"
+        ):
+            common_module.load_contract(factory, "0xoracle", ("setGrovePrice",))
+        factory.from_explorer.assert_not_called()
+        factory.from_abi.assert_not_called()
+
+    def test_floor_update_uses_shared_management_and_separate_grove_interface(self):
+        strategy_address = "0xstrategy"
+        manager = "0xmanager"
+        base = types.SimpleNamespace(management=lambda: manager)
+        strategy = FakeStrategy(60 * 10**14)
+        auction = FakeAuction(strategy.floor, False)
+        factory = Mock(side_effect=lambda address: (
+            base if address == strategy_address else auction
+        ))
+        factory.from_explorer.return_value = strategy
+        sender = types.SimpleNamespace(address=manager)
+
+        def load_authorized(accounts, description, is_authorized):
+            self.assertTrue(is_authorized(manager))
+            self.assertFalse(is_authorized("0xsomeoneelse"))
+            return sender
+
+        with (
+            patch.object(price_script, "Contract", factory),
+            patch.object(price_script, "_interactive_confirm", return_value=True),
+            patch.object(price_script, "load_authorized_account", load_authorized),
+        ):
+            price_script._review_auction_floor(strategy_address, 10**16, "test", True)
+
+        self.assertEqual(strategy.floor_updates, [(8 * 10**15, {"from": sender})])
+        self.assertEqual([call.args for call in factory.call_args_list], [
+            (strategy_address,), (strategy.auction(),),
+        ])
+        factory.from_explorer.assert_called_once_with(
+            strategy_address, as_proxy_for=strategy_address, persist=False
+        )
+        factory.from_abi.assert_not_called()
+
     def test_authorized_account_defaults_to_llc2(self):
         loaded = []
         sender = types.SimpleNamespace(
@@ -120,10 +261,8 @@ class MaintenancePolicyTest(unittest.TestCase):
                 "0x0000000000000000000000000000000000000003"
             ]
         )
-        contract_factory = types.SimpleNamespace(
-            from_abi=lambda name, address, abi: (
-                yearn_oracle if name == "YearnAprOracle" else vault
-            )
+        contract_factory = lambda address: (
+            yearn_oracle if address == common_module.YEARN_APR_ORACLE else vault
         )
 
         with patch("builtins.print") as output:
@@ -148,9 +287,7 @@ class MaintenancePolicyTest(unittest.TestCase):
         yearn_oracle = types.SimpleNamespace(
             oracles=lambda strategy: registered_oracle
         )
-        contract_factory = types.SimpleNamespace(
-            from_abi=lambda name, address, abi: yearn_oracle
-        )
+        contract_factory = lambda address: yearn_oracle
 
         with self.assertRaisesRegex(RuntimeError, "maps strategy"):
             common_module.validate_mainnet_deployment(
@@ -241,11 +378,11 @@ class MaintenancePolicyTest(unittest.TestCase):
     def test_active_auction_defers_floor_update_before_prompt_or_account_load(self):
         strategy = FakeStrategy(60 * 10**14)
         auction = FakeAuction(60 * 10**14, True)
-        contract_factory = types.SimpleNamespace(
-            from_abi=lambda name, address, abi: (
-                strategy if name == "GroveCompounder" else auction
-            )
-        )
+        base = types.SimpleNamespace(management=lambda: "0xmanager")
+        contract_factory = Mock(side_effect=lambda address: (
+            auction if address == strategy.auction() else base
+        ))
+        contract_factory.from_explorer.return_value = strategy
 
         with (
             patch.object(price_script, "Contract", contract_factory),

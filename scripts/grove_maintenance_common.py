@@ -3,6 +3,7 @@
 import json
 import os
 import ssl
+from unittest.mock import patch
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -23,25 +24,35 @@ YEARN_APR_ORACLE = "0x1981AD9F44F2EA9aDd2dC4AD7D075c102C70aF92"
 USDS_1_VAULT = "0x182863131F9a4630fF9E27830d945B1413e347E8"
 DEFAULT_BROWNIE_ACCOUNT = "llc2"
 
-YEARN_APR_ORACLE_ABI = [
-    {
-        "inputs": [{"name": "_strategy", "type": "address"}],
-        "name": "oracles",
-        "outputs": [{"type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    }
-]
 
-YEARN_VAULT_ABI = [
-    {
-        "inputs": [],
-        "name": "get_default_queue",
-        "outputs": [{"type": "address[]"}],
-        "stateMutability": "view",
-        "type": "function",
-    }
-]
+def load_contract(contract_factory, address, required_methods, strategy=False):
+    """Use canonical metadata, or the approved strategy self-address override."""
+    # Keep Brownie optional for the standalone pool-registry generator.
+    from brownie._config import CONFIG
+
+    previous_autofetch = CONFIG.settings["autofetch_sources"]
+    try:
+        # Contract(address) needs this to fetch canonical metadata on cache misses.
+        CONFIG.settings["autofetch_sources"] = True
+        # Brownie's recursive explorer paths can ignore persist=False.
+        with patch("brownie.network.contract._add_deployment", return_value=None):
+            if strategy:
+                contract = contract_factory.from_explorer(
+                    address, as_proxy_for=address, persist=False
+                )
+            else:
+                contract = contract_factory(address)
+    finally:
+        CONFIG.settings["autofetch_sources"] = previous_autofetch
+
+    missing = [method for method in required_methods if not hasattr(contract, method)]
+    if missing:
+        raise RuntimeError(
+            "{}: resolved {}; missing {}. No alternate ABI was loaded.".format(
+                address, contract._name, ", ".join(missing)
+            )
+        )
+    return contract
 
 
 def env_bool(name, default=False):
@@ -101,9 +112,7 @@ def load_authorized_account(accounts, description, is_authorized):
 def validate_mainnet_deployment(contract_factory, oracle_address, strategy_address):
     """Verify the deployed strategy/oracle link and report USDS-1 queue status."""
     yearn_oracle_address = address_env("YEARN_APR_ORACLE", YEARN_APR_ORACLE)
-    yearn_oracle = contract_factory.from_abi(
-        "YearnAprOracle", yearn_oracle_address, YEARN_APR_ORACLE_ABI
-    )
+    yearn_oracle = load_contract(contract_factory, yearn_oracle_address, ("oracles",))
     registered_oracle = normalize_hex(yearn_oracle.oracles(strategy_address))
     expected_oracle = normalize_hex(oracle_address)
     if registered_oracle != expected_oracle:
@@ -118,7 +127,7 @@ def validate_mainnet_deployment(contract_factory, oracle_address, strategy_addre
     print("Yearn APR registry: strategy is linked to the expected oracle.")
 
     vault_address = address_env("USDS_1_VAULT", USDS_1_VAULT)
-    vault = contract_factory.from_abi("USDS1Vault", vault_address, YEARN_VAULT_ABI)
+    vault = load_contract(contract_factory, vault_address, ("get_default_queue",))
     queue = [normalize_hex(address) for address in vault.get_default_queue()]
     strategy_in_queue = normalize_hex(strategy_address) in queue
     if strategy_in_queue:

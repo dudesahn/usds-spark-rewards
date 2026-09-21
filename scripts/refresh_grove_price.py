@@ -10,7 +10,8 @@ The script also monitors the oracle's 10,000 GROVE Uniswap V4 fallback, prints
 the effective onchain price/status/APR, and offers an auction-floor update when
 the recommendation differs by at least 10%.
 
-No transaction is sent unless ``BROADCAST=true``.
+No transaction is sent unless ``BROADCAST=true``. Contract loading leaves
+Brownie's deployment cache unchanged and uses no handwritten ABIs.
 
 Examples:
 
@@ -38,6 +39,7 @@ try:
         fetch_kyber_route,
         format_price as _format_price,
         load_authorized_account,
+        load_contract,
         positive_int_env,
         require_mainnet,
         validate_mainnet_deployment,
@@ -56,6 +58,7 @@ except ModuleNotFoundError as error:
         fetch_kyber_route,
         format_price as _format_price,
         load_authorized_account,
+        load_contract,
         positive_int_env,
         require_mainnet,
         validate_mainnet_deployment,
@@ -79,144 +82,14 @@ PRICE_STATUS_NAMES = {
     4: "decaying stored reference",
 }
 
-ORACLE_ABI = [
-    {
-        "inputs": [],
-        "name": "GROVE_PRICE_QUOTE_AMOUNT",
-        "outputs": [{"type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "MAX_LIVE_PRICE_DEVIATION_BPS",
-        "outputs": [{"type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "management",
-        "outputs": [{"type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [{"type": "address"}],
-        "name": "priceSetters",
-        "outputs": [{"type": "bool"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "storedGrovePrice",
-        "outputs": [{"type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "lastPriceUpdate",
-        "outputs": [{"type": "uint64"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "grovePriceWithStatus",
-        "outputs": [
-            {"name": "price", "type": "uint256"},
-            {"name": "status", "type": "uint8"},
-        ],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "quoteUniV4Route",
-        "outputs": [
-            {"name": "totalAmountOut", "type": "uint256"},
-            {"name": "amountAllocated", "type": "uint256"},
-            {"name": "price", "type": "uint256"},
-            {"name": "poolIds", "type": "bytes32[]"},
-            {"name": "allocations", "type": "uint256[]"},
-            {"name": "outputs", "type": "uint256[]"},
-        ],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [{"name": "_price", "type": "uint256"}],
-        "name": "setGrovePrice",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-    {
-        "inputs": [
-            {"name": "", "type": "address"},
-            {"name": "_delta", "type": "int256"},
-        ],
-        "name": "aprAfterDebtChange",
-        "outputs": [{"name": "oracleApr", "type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-]
-
-STRATEGY_ABI = [
-    {
-        "inputs": [],
-        "name": "management",
-        "outputs": [{"type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "auction",
-        "outputs": [{"type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "minimumAuctionPrice",
-        "outputs": [{"type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [{"name": "_minimumAuctionPrice", "type": "uint256"}],
-        "name": "setMinimumAuctionPrice",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-]
-
-AUCTION_ABI = [
-    {
-        "inputs": [],
-        "name": "minimumPrice",
-        "outputs": [{"type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "isAnActiveAuction",
-        "outputs": [{"type": "bool"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-]
-
-
 def _load_oracle(address):
     require_mainnet(chain.id)
-    return Contract.from_abi("GroveCompounderAprOracle", address, ORACLE_ABI)
+    return load_contract(
+        Contract, address,
+        ("GROVE_PRICE_QUOTE_AMOUNT", "MAX_LIVE_PRICE_DEVIATION_BPS", "management",
+         "priceSetters", "storedGrovePrice", "lastPriceUpdate", "grovePriceWithStatus",
+         "quoteUniV4Route", "setGrovePrice", "aprAfterDebtChange"),
+    )
 
 
 def _fetch_kyber_price(amount_in, timeout):
@@ -326,11 +199,17 @@ def _review_auction_floor(strategy_address, selected_price, source, broadcast):
         print("Auction check: skipped (set STRATEGY to enable it)")
         return
 
-    strategy = Contract.from_abi("GroveCompounder", strategy_address, STRATEGY_ABI)
+    # Shared TokenizedStrategy methods and Grove's own methods live at the same
+    # address, but use separate verified interfaces without merging or caching.
+    base = load_contract(Contract, strategy_address, ("management",))
+    strategy = load_contract(
+        Contract, strategy_address,
+        ("auction", "minimumAuctionPrice", "setMinimumAuctionPrice"), strategy=True,
+    )
     auction_address = strategy.auction()
     if str(auction_address).lower() == ZERO_ADDRESS:
         raise RuntimeError("Strategy auction address is zero")
-    auction = Contract.from_abi("Auction", auction_address, AUCTION_ABI)
+    auction = load_contract(Contract, auction_address, ("minimumPrice", "isAnActiveAuction"))
 
     strategy_floor = int(strategy.minimumAuctionPrice())
     auction_floor = int(auction.minimumPrice())
@@ -371,7 +250,7 @@ def _review_auction_floor(strategy_address, selected_price, source, broadcast):
         print("Auction floor left unchanged.")
         return
 
-    management = strategy.management()
+    management = base.management()
     sender = load_authorized_account(
         accounts,
         "auction floor update",

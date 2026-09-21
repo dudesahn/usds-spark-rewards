@@ -5,7 +5,8 @@ This is a read-only dry run unless ``BROADCAST=true`` or
 ``APPLY_REGISTRY=true``. Broadcasting updates the onchain oracle and then the
 source-controlled registry. APPLY_REGISTRY updates only the registry and its
 generated Solidity deployment snapshot. Brownie supplies the active network,
-contract access, account loading, and transaction handling.
+contract access, account loading, and transaction handling. Contract loading
+leaves Brownie's deployment cache unchanged and uses no handwritten ABIs.
 
 By default the script asks Kyber for its unrestricted best GROVE/USDC routes at
 10,000, 50,000, and 100,000 GROVE. It records any hookless Uniswap V4 first leg
@@ -43,6 +44,7 @@ try:
         env_bool,
         fetch_kyber_route,
         load_authorized_account,
+        load_contract,
         normalize_hex,
         positive_int_env,
         require_mainnet,
@@ -70,6 +72,7 @@ except ModuleNotFoundError as error:
         env_bool,
         fetch_kyber_route,
         load_authorized_account,
+        load_contract,
         normalize_hex,
         positive_int_env,
         require_mainnet,
@@ -93,58 +96,6 @@ DEFAULT_QUOTE_AMOUNTS = (
     100_000 * 10**18,
 )
 CLIENT_ID = "grove-apr-oracle-pool-sync"
-
-ORACLE_ABI = [
-    {
-        "inputs": [],
-        "name": "MAX_V4_POOLS",
-        "outputs": [{"type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "management",
-        "outputs": [{"type": "address"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [{"type": "address"}],
-        "name": "poolSetters",
-        "outputs": [{"type": "bool"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [],
-        "name": "uniV4PoolCount",
-        "outputs": [{"type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [{"type": "uint256"}],
-        "name": "uniV4Pool",
-        "outputs": [
-            {"name": "poolId", "type": "bytes32"},
-            {"name": "fee", "type": "uint24"},
-            {"name": "tickSpacing", "type": "int24"},
-            {"name": "quoteToken", "type": "address"},
-            {"name": "zeroForOne", "type": "bool"},
-        ],
-        "stateMutability": "view",
-        "type": "function",
-    },
-    {
-        "inputs": [{"name": "_poolIds", "type": "bytes32[]"}],
-        "name": "setUniV4Pools",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function",
-    },
-]
-
 
 def _fetch_kyber_route(amount_in, timeout):
     return fetch_kyber_route(amount_in, timeout, CLIENT_ID)
@@ -186,10 +137,11 @@ def _hookless_v4_grove_pools(route_summary):
 def _load_oracle(oracle_address):
     require_mainnet(chain.id)
 
-    oracle = Contract.from_abi(
-        "GroveCompounderAprOracle", oracle_address, ORACLE_ABI
+    return load_contract(
+        Contract, oracle_address,
+        ("MAX_V4_POOLS", "management", "poolSetters", "uniV4PoolCount",
+         "uniV4Pool", "setUniV4Pools"),
     )
-    return oracle
 
 
 def _configured_pool_entries(oracle):
