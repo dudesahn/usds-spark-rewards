@@ -376,11 +376,11 @@ class MaintenancePolicyTest(unittest.TestCase):
         self.assertEqual(oracle.price_calls, [])
         load_account.assert_not_called()
 
-    def test_kyber_price_quote_defaults_to_one_hundred_thousand_grove(self):
+    def test_kyber_price_quote_defaults_to_five_hundred_thousand_grove(self):
         with patch.dict(os.environ, {}, clear=True):
             self.assertEqual(
                 price_script._kyber_quote_amount(),
-                100_000 * 10**18,
+                500_000 * 10**18,
             )
 
     def test_comparison_quotes_do_not_change_reference_or_block_maintenance(self):
@@ -397,9 +397,9 @@ class MaintenancePolicyTest(unittest.TestCase):
 
                 def fetch_price(amount, timeout):
                     amounts.append(amount // 10**18)
-                    if comparison_fails and amount == 500_000 * 10**18:
+                    if comparison_fails and amount == 100_000 * 10**18:
                         raise RuntimeError("HTTP 503")
-                    price = reference_price if amount == 100_000 * 10**18 else 6 * 10**15
+                    price = reference_price if amount == 500_000 * 10**18 else 6 * 10**15
                     return price, {"amountIn": str(amount), "amountOut": str(amount * price // 10**30)}
 
                 with (
@@ -414,7 +414,7 @@ class MaintenancePolicyTest(unittest.TestCase):
                 ):
                     self.assertTrue(price_script.main())
 
-                self.assertEqual(amounts, [100_000, 500_000, 1_000_000])
+                self.assertEqual(amounts, [500_000, 100_000, 1_000_000])
                 self.assertEqual(oracle.price_calls, [(reference_price, {"from": sender})])
                 review_floor.assert_called_once_with(
                     price_script.MAINNET_GROVE_STRATEGY, reference_price,
@@ -422,11 +422,15 @@ class MaintenancePolicyTest(unittest.TestCase):
                 )
                 messages = [call.args[0] for call in output.call_args_list if call.args]
                 self.assertTrue(any(
+                    message.split() == ["500,000", "4,000.000000", "0.00800000", "refresh", "+", "floor"]
+                    for message in messages
+                ))
+                self.assertTrue(any(
                     message.split() == ["1,000,000", "6,000.000000", "0.00600000", "comparison", "only"]
                     for message in messages
                 ))
                 if comparison_fails:
-                    self.assertTrue(any("Comparison unavailable for 500,000 GROVE" in message for message in messages))
+                    self.assertTrue(any("Comparison unavailable for 100,000 GROVE" in message for message in messages))
 
     def test_kyber_price_quote_amount_can_be_overridden_in_grove_units(self):
         with patch.dict(

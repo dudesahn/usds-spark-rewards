@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Maintain the GROVE APR reference price and review the auction floor.
 
-This script is intended to run around twice per day. It always obtains an
-unrestricted 100,000 GROVE Kyber quote and stores the raw per-GROVE price when
+This script is intended to run around twice per day. By default it obtains an
+unrestricted 500,000 GROVE Kyber quote and stores the raw per-GROVE price when
 the reference is uninitialized, at least 36 hours old, or at least 10% away
 from the new quote. A move over 50% requires interactive confirmation.
-Additional 500,000 and 1,000,000 GROVE quotes show total proceeds and the
+Additional 100,000 and 1,000,000 GROVE quotes show total proceeds and the
 average price for comparison; they do not set the reference or auction floor.
+Set KYBER_QUOTE_AMOUNT to override the reference size in whole GROVE.
 
 The script also monitors the oracle's 10,000 GROVE Uniswap V4 fallback, prints
 the effective onchain price/status/APR, and offers an auction-floor update when
@@ -84,7 +85,7 @@ STORED_PRICE_UPDATE_THRESHOLD_BPS = 1_000
 STORED_PRICE_REFRESH_AGE = 36 * 60 * 60
 STORED_PRICE_VALIDITY = 72 * 60 * 60
 STORED_PRICE_DECAY_START = 7 * 24 * 60 * 60
-DEFAULT_KYBER_QUOTE_GROVE = 100_000
+DEFAULT_KYBER_QUOTE_GROVE = 500_000
 KYBER_CLIENT_ID = "grove-apr-oracle-price-refresh"
 
 PRICE_STATUS_NAMES = {
@@ -122,7 +123,7 @@ def _print_kyber_comparison_quotes(reference_amount, reference_routes=()):
     timeout = positive_int_env("KYBER_TIMEOUT", 30)
     routes = list(reference_routes)
     failures = []
-    for grove_amount in (500_000, 1_000_000):
+    for grove_amount in (100_000, 500_000, 1_000_000):
         amount_in = grove_amount * 10**18
         if amount_in == reference_amount:
             continue  # Already fetched as the operator-selected reference quote.
@@ -132,7 +133,7 @@ def _print_kyber_comparison_quotes(reference_amount, reference_routes=()):
         except Exception as error:
             failures.append((grove_amount, error))
     print("\n  Kyber quotes (GROVE -> USDC)")
-    print_quotes(routes, reference_amount)
+    print_quotes(sorted(routes, key=lambda route: int(route["amountIn"])), reference_amount)
     for grove_amount, error in failures:
         status("WARN", "Comparison unavailable for {:,} GROVE: {}".format(grove_amount, error))
 
