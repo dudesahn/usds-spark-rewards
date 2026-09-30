@@ -1,0 +1,396 @@
+{
+  "documentType": "codex-security.findings",
+  "findings": [
+    {
+      "attackPath": {
+        "dataflow": {
+          "evidenceRefs": [
+            "auction-active-rejection",
+            "report-unconditional-kick",
+            "strategy-transfer-and-kick"
+          ],
+          "outcome": "repeatable denial of keeper reporting, reward recognition, and report-time maintenance",
+          "sink": "the Auction's `require(!isActive(_from), \"too soon\")` check",
+          "source": "unprivileged caller-controlled donation amount and kick timing",
+          "summary": "public GROVE donation and `Auction.kick()` -> active token auction -> keeper `report()` -> `_harvestAndReport()` -> `_kickAuction()` -> active-auction rejection -> report rollback"
+        },
+        "evidenceRefs": [
+          "auction-active-rejection",
+          "report-unconditional-kick",
+          "strategy-transfer-and-kick"
+        ],
+        "impact": {
+          "level": "medium",
+          "why": "The attacker can repeatedly deny a shared maintenance workflow and keep report-time accounting stale, but no principal loss was shown."
+        },
+        "likelihood": {
+          "level": "high",
+          "why": "The affected boundary is public, the capital requirement is one wei plus gas, and the path was reproduced with the relied-on default kick policy and production reward threshold."
+        },
+        "limitations": [
+          "Exact live deployment prevalence and per-instance Auction configuration were not enumerated."
+        ],
+        "reachability": {
+          "attacker": "unprivileged blockchain account",
+          "entrypoint": "public `Auction.kick(REWARDS_TOKEN)` after a one-wei donation",
+          "outcome": "authorized reports revert until an uncontested expiry window or management recovery",
+          "summary": "The attacker needs an arbitrary EOA or contract, one wei of GROVE, gas, and a configured public-kick Auction. The victim call remains keeper-authorized; exploitation works by manipulating the external state that the keeper path consumes."
+        },
+        "summary": "An unprivileged account donates one wei of GROVE to the configured Auction and publicly kicks the token before a keeper report. The later report claims a threshold-sized reward balance, transfers it, and re-kicks the already-active auction; `too soon` reverts the entire report. The attacker can renew after each one-day window."
+      },
+      "codeEvidence": [
+        {
+          "code": "} else if (toSwap > minRewardAmountToSell) {\n    _kickAuction(REWARDS_TOKEN, toSwap);\n}",
+          "endLine": 109,
+          "explanation": "Once claimed GROVE exceeds the threshold, the report path calls `_kickAuction()` without first determining whether the configured Auction already has an active GROVE auction.",
+          "id": "report-unconditional-kick",
+          "label": "Reward-bearing reports unconditionally start an auction",
+          "language": "solidity",
+          "path": "src/GroveCompounder.sol",
+          "role": "root_control",
+          "startLine": 107
+        },
+        {
+          "code": "function _kickAuction(address _token, uint256 _balance) internal {\n    require(_token != address(asset), \"!asset\");\n    address _auction = auction;\n    require(_auction != address(0), \"!auction\");\n    ERC20(_token).safeTransfer(_auction, _balance);\n    Auction(_auction).kick(_token);\n}",
+          "endLine": 180,
+          "explanation": "The report sends all reward tokens to the external Auction and then invokes `kick()`. A revert from that call propagates through the report and atomically rolls the transfer and accounting back.",
+          "id": "strategy-transfer-and-kick",
+          "label": "The strategy transfers the full balance and immediately calls kick",
+          "language": "solidity",
+          "path": "src/GroveCompounder.sol",
+          "role": "propagation",
+          "startLine": 174
+        },
+        {
+          "code": "    function kick(address _from) external virtual nonReentrant returns (uint256 _available) {\n        return _kick(_from);\n    }\n\n    function _kick(address _from) internal virtual returns (uint256 _available) {\n        if (governanceOnlyKick) _checkGovernance();\n\n        require(auctions[_from].scaler != 0, \"not enabled\");\n        require(!isActive(_from), \"too soon\");\n\n        // Just use current balance.\n        _available = ERC20(_from).balanceOf(address(this));\n\n        require(_available != 0, \"nothing to kick\");\n\n        // Update the auctions status.\n        auctions[_from].kicked = uint64(block.timestamp);\n        auctions[_from].initialAvailable = uint128(_available);",
+          "endLine": 520,
+          "explanation": "When `governanceOnlyKick` is false, any caller can kick an enabled token with a nonzero Auction balance. That records an active auction; the strategy's later `kick()` reaches the `too soon` rejection.",
+          "id": "auction-active-rejection",
+          "label": "Public kick rejects an already-active token auction",
+          "language": "solidity",
+          "path": "lib/tokenized-strategy-periphery/src/Auctions/Auction.sol",
+          "role": "sink",
+          "startLine": 503
+        },
+        {
+          "code": "function setAuction(address _auction) external onlyManagement {\n    if (_auction != address(0)) {\n        require(Auction(_auction).receiver() == address(this), \"receiver\");\n        require(Auction(_auction).want() == address(asset), \"want\");\n    } else {\n        require(!useAuction, \"!auction\");\n    }\n    auction = _auction;\n}",
+          "endLine": 217,
+          "explanation": "Configuration verifies the receiver and wanted asset but does not require restricted kicks or otherwise ensure that the report path can tolerate an already-active auction.",
+          "id": "configuration-compatibility-gap",
+          "label": "Auction configuration does not check kick policy or active-state compatibility",
+          "language": "solidity",
+          "path": "src/GroveCompounder.sol",
+          "role": "expected_control",
+          "startLine": 209
+        }
+      ],
+      "confidence": {
+        "level": "high",
+        "rationale": "Static source tracing and a pinned mainnet-fork suite confirmed the normal collision, arbitrary one-wei pre-kick, repeatable renewal, unchanged `lastReport`, and recovery when renewal stops; three tests passed including 16 bounded fuzz runs."
+      },
+      "extensions": {
+        "candidateId": "CAN-008",
+        "ledgerRowId": "COV-016",
+        "reportId": "CS-001"
+      },
+      "findingId": "csf_caa09b28e81d6df8702f4f3b",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:534d8db1d5fccc4c538800f62807841d102a9b58de25ebd683623bca95d356c0"
+      },
+      "identity": {
+        "anchor": "grove-compounder-report-rekicks-active-auction",
+        "instance": "reward-token"
+      },
+      "locations": [
+        {
+          "endLine": 109,
+          "path": "src/GroveCompounder.sol",
+          "role": "root_control",
+          "startLine": 107
+        },
+        {
+          "endLine": 180,
+          "path": "src/GroveCompounder.sol",
+          "role": "sink",
+          "startLine": 174
+        },
+        {
+          "endLine": 216,
+          "path": "src/GroveCompounder.sol",
+          "role": "configuration",
+          "startLine": 209
+        },
+        {
+          "endLine": 520,
+          "path": "lib/tokenized-strategy-periphery/src/Auctions/Auction.sol",
+          "role": "concrete_implementation",
+          "startLine": 503
+        }
+      ],
+      "occurrenceId": "occ_d89b750dd6f4abcb5093ceb2",
+      "preventiveControls": [
+        "Model external integrations as state machines and require explicit handling for every reachable external state.",
+        "Validate Auction kick policy and compatibility during configuration, and monitor repeated failed reports or stale `lastReport`."
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Make report-time reward handling idempotent with respect to an active auction. Before transferring rewards, check whether the reward token's auction is active; if it is, leave newly claimed rewards in the strategy and allow the report to complete, then transfer and kick after expiry. Restricting public kicks is useful defense in depth but does not by itself solve ordinary report-to-report collisions.",
+      "remediationTests": [
+        "Start an auction, accrue another above-threshold reward balance, and assert that `report()` succeeds without attempting a second kick.",
+        "After expiry, assert that the retained reward balance is transferred and a new auction starts exactly once.",
+        "Repeat the public one-wei pre-kick and renewal sequence and assert that reports continue to advance `lastReport`."
+      ],
+      "rootCause": {
+        "evidenceRefs": [
+          "report-unconditional-kick",
+          "strategy-transfer-and-kick",
+          "auction-active-rejection",
+          "configuration-compatibility-gap"
+        ],
+        "summary": "The report workflow assumes that every above-threshold reward balance can start a fresh auction. `GroveCompounder` neither checks nor tolerates the Auction's active state before transferring rewards and calling `kick()`, while the directly relied-on Auction permits public kicks by default and rejects a second kick during the active window. This lets attacker-controlled external state become a revert condition for the trusted report path."
+      },
+      "ruleId": "denial-of-service.auction-rekick",
+      "severity": {
+        "changeConditions": "Raise the rating only if delayed reports are shown to cause principal loss, insolvency, or another high-impact downstream failure. Lower it if every deployed compatible Auction restricts kicks and reports cannot naturally collide with active auctions.",
+        "level": "medium",
+        "rationale": "The attack repeatedly denies a shared keeper report and delays reward recognition and report-time maintenance at one transaction per auction window. No principal loss, withdrawal failure, or permanent corruption was demonstrated, and reporting recovers after an uncontested expiry window or management reconfiguration."
+      },
+      "summary": "`GroveCompounder` unconditionally transfers its reward balance to the configured Auction and calls `kick()` whenever rewards exceed the threshold. If that token's auction is already active, the Auction reverts with `too soon`, rolling back the keeper report. Under the relied-on default public-kick configuration, an unprivileged caller can donate one wei of GROVE, pre-kick the auction, and renew the denial after every auction window.",
+      "taxonomy": {
+        "category": "denial-of-service",
+        "cwe": [
+          "CWE-400",
+          "CWE-841"
+        ]
+      },
+      "title": "An active reward auction can repeatedly block strategy reports",
+      "validation": {
+        "assertions": [
+          "A public caller can activate the GROVE auction with a one-wei donation when governance-only kicking is disabled.",
+          "A reward-bearing strategy report reverts with `too soon` while that auction is active and does not advance `lastReport`.",
+          "The denial can be renewed after each auction window and reporting succeeds after an uncontested expiry window."
+        ],
+        "evidenceRefs": [
+          "report-unconditional-kick",
+          "strategy-transfer-and-kick",
+          "auction-active-rejection"
+        ],
+        "limitations": [
+          "The suite used a production-factory clone rather than enumerating every currently deployed strategy/Auction pair.",
+          "No principal loss or withdrawal failure was demonstrated."
+        ],
+        "method": "pinned mainnet-fork integration and bounded fuzz testing",
+        "summary": "A fresh unmodified strategy and an Auction created through the production factory were exercised at a pinned Ethereum block. The suite confirmed a normal two-report collision, an arbitrary one-wei donation and pre-kick, renewal with the same unsold wei after one day, unchanged `lastReport` while blocked, and recovery when renewal stopped."
+      },
+      "writeup": {
+        "reportPath": "findings/permissionless-auction-prekick-report-dos/permissionless-auction-prekick-report-dos.md"
+      }
+    },
+    {
+      "attackPath": {
+        "dataflow": {
+          "evidenceRefs": [
+            "claimable-reward-state",
+            "inherited-report-boundary-assets",
+            "deposit-mints-stale-priced-shares",
+            "strategy-reports-only-stake-and-asset"
+          ],
+          "outcome": "cross-depositor transfer of pre-entry reward yield to the late depositor",
+          "sink": "share conversion using report-boundary assets that omit the pending reward lot",
+          "source": "observable claimable GROVE earned before the attacker deposits",
+          "summary": "observable pre-entry GROVE accrual -> stale `lastTotalAssets` share conversion -> late share mint -> old reward sale and report -> profit unlock -> late redemption"
+        },
+        "evidenceRefs": [
+          "claimable-reward-state",
+          "inherited-report-boundary-assets",
+          "deposit-mints-stale-priced-shares",
+          "strategy-reports-only-stake-and-asset"
+        ],
+        "impact": {
+          "level": "medium",
+          "why": "The path diverts yield between depositors but does not expose strategy principal or cause insolvency in the validated scenario."
+        },
+        "likelihood": {
+          "level": "medium",
+          "why": "The path is mechanically reproducible and needs no privilege in open mode, but requires material pending rewards, capital duration, and favorable net economics."
+        },
+        "limitations": [
+          "The repository does not establish the current open/allowlist state or typical reward-lot economics of every deployed strategy."
+        ],
+        "reachability": {
+          "attacker": "untrusted open-mode or allowlisted depositor",
+          "entrypoint": "inherited `deposit()` before pending rewards are realized",
+          "outcome": "redemption includes part of reward value earned before entry",
+          "summary": "The attacker needs an open strategy or allowlist access, ordinary USDS capital, observable material rewards, and willingness to remain through sale settlement and profit unlock. No keeper or management privilege is required for an open strategy."
+        },
+        "summary": "An open-mode or allowlisted depositor observes material GROVE earned by incumbent shares, deposits USDS before that reward lot is realized, and receives shares priced from the last reported USDS total. After authorized auction settlement, reporting, and profit unlock, the depositor redeems its pro rata portion of the old reward proceeds."
+      },
+      "codeEvidence": [
+        {
+          "code": "function claimableRewards() external view returns (uint256) {\n    return STAKING.earned(address(this));\n}",
+          "endLine": 72,
+          "explanation": "The staking contract tracks GROVE already earned by incumbent capital before it is claimed or converted into the strategy asset. An entering depositor can observe this pending value and time entry before realization.",
+          "id": "claimable-reward-state",
+          "label": "Accrued reward value is observable before reporting",
+          "language": "solidity",
+          "path": "src/GroveCompounder.sol",
+          "role": "user_input",
+          "startLine": 70
+        },
+        {
+          "code": "        // get our rewards. if no rewards is a noop so no worries about reverts\n        _claimRewards();\n\n        // store in memory to save gas\n        uint256 toSwap = balanceOfRewards();\n        uint256 minRewardAmountToSell = minAmountToSell[REWARDS_TOKEN];\n\n        if (!useAuction) {\n            if (toSwap > minRewardAmountToSell) {\n                require(PSM_WRAPPER.tin() == 0, \"!psmFee\");\n                // swap if using UniV3 to sell rewards\n                _swapFrom(REWARDS_TOKEN, base, toSwap, 0);\n                // use PSM to go from USDC to USDS for free\n                PSM_WRAPPER.sellGem(\n                    address(this),\n                    ERC20(base).balanceOf(address(this))\n                );\n            }\n        } else if (toSwap > minRewardAmountToSell) {\n            _kickAuction(REWARDS_TOKEN, toSwap);\n        }",
+          "endLine": 109,
+          "explanation": "Pending rewards are claimed and routed to a sale only during reporting. Before the resulting USDS is recognized, the value remains outside the asset balance used for report-time totals.",
+          "id": "report-realizes-rewards",
+          "label": "Rewards enter the report only after claim and sale",
+          "language": "solidity",
+          "path": "src/GroveCompounder.sol",
+          "role": "propagation",
+          "startLine": 89
+        },
+        {
+          "code": "uint256 balance = balanceOfAsset();\nif (!TokenizedStrategy.isShutdown()) {\n    if (balance > DUST) {\n        _deployFunds(balance);\n    }\n}\n_totalAssets = balanceOfStake() + balanceOfAsset();",
+          "endLine": 117,
+          "explanation": "The strategy reports only staked and idle USDS. It assigns no value or reservation to claimable GROVE or GROVE already committed to an auction, so those rewards are recognized only in a later report after sale proceeds return.",
+          "id": "strategy-reports-only-stake-and-asset",
+          "label": "Reported assets omit claimable and auction-held rewards",
+          "language": "solidity",
+          "path": "src/GroveCompounder.sol",
+          "role": "root_control",
+          "startLine": 111
+        },
+        {
+          "code": "     * The default returns `TokenizedStrategy.lastTotalAssets()`, preserving\n     * v3.0.4 report-boundary accounting. Strategies that want live accounting\n     * should override this with a strictly read-only estimate of all assets,\n     * including loose funds.\n     *\n     * NOTE: An override must not harvest, claim or otherwise mutate state.\n     *\n     * @return _totalAssets The strategy's current asset estimate.\n     */\n    function _strategyTotalAssets()\n        internal\n        view\n        virtual\n        returns (uint256 _totalAssets)\n    {\n        return TokenizedStrategy.lastTotalAssets();\n    }",
+          "endLine": 244,
+          "explanation": "Because `GroveCompounder` does not override this hook, deposits are priced from the last reported USDS total even when incumbent capital has already earned observable GROVE.",
+          "id": "inherited-report-boundary-assets",
+          "label": "Default share pricing returns the last reported asset total",
+          "language": "solidity",
+          "path": "lib/tokenized-strategy/src/BaseStrategy.sol",
+          "role": "root_control",
+          "startLine": 228
+        },
+        {
+          "code": "        // Checking max deposit will also check if shutdown.\n        require(\n            assets <= _maxDeposit(S, receiver),\n            \"ERC4626: deposit more than max\"\n        );\n        // Check for rounding error.\n        require(\n            (shares = _convertToShares(S, assets, Math.Rounding.Down)) != 0,\n            \"ZERO_SHARES\"\n        );\n\n        _deposit(S, receiver, assets, shares);",
+          "endLine": 540,
+          "explanation": "The late depositor receives shares using the report-boundary asset estimate before their capital is added. When the old reward lot is later reported as USDS profit, that profit is distributed across both incumbent and newly minted shares.",
+          "id": "deposit-mints-stale-priced-shares",
+          "label": "Deposits convert assets to shares before adding the deposit",
+          "language": "solidity",
+          "path": "lib/tokenized-strategy/src/TokenizedStrategy.sol",
+          "role": "outcome",
+          "startLine": 529
+        }
+      ],
+      "confidence": {
+        "level": "high",
+        "rationale": "A pinned mainnet-fork integration suite and 32 bounded fuzz runs confirmed the share-fraction formula, positive capture before and after the default performance fee, closed-unlisted rejection, allowlisted reachability, and the fact that profit locking delays rather than prevents the transfer."
+      },
+      "extensions": {
+        "candidateId": "CAN-006",
+        "ledgerRowId": "w04-file-001",
+        "reportId": "CS-002"
+      },
+      "findingId": "csf_b51d06995c5b3b21d7a6c516",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:f9fef9d89ccf14195e55a90e07bb949a6f0c6808b6226e17fd5ef2c78394ae0b"
+      },
+      "identity": {
+        "anchor": "grove-compounder-share-pricing-omits-pending-rewards",
+        "instance": "late-depositor"
+      },
+      "locations": [
+        {
+          "endLine": 72,
+          "path": "src/GroveCompounder.sol",
+          "role": "observable_state",
+          "startLine": 70
+        },
+        {
+          "endLine": 118,
+          "path": "src/GroveCompounder.sol",
+          "role": "root_control",
+          "startLine": 84
+        },
+        {
+          "endLine": 244,
+          "path": "lib/tokenized-strategy/src/BaseStrategy.sol",
+          "role": "concrete_implementation",
+          "startLine": 225
+        },
+        {
+          "endLine": 540,
+          "path": "lib/tokenized-strategy/src/TokenizedStrategy.sol",
+          "role": "entrypoint",
+          "startLine": 516
+        }
+      ],
+      "occurrenceId": "occ_cf4b7b6914cb93718ef58d5d",
+      "preventiveControls": [
+        "Define an explicit lifecycle invariant for ownership of unreported rewards and encode it in share-pricing/accounting tests.",
+        "Monitor unusually large deposits immediately before reward reports and auction settlements."
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Checkpoint or reserve pre-entry reward value before minting new shares, or include a conservative read-only value for claimable and auction-pending rewards in share-pricing accounting. The chosen design must attribute each reward lot to the share supply that earned it across claim, auction, settlement, report, fee, and profit-unlock states.",
+      "remediationTests": [
+        "Accrue rewards for incumbent shares, deposit immediately before realization, settle and unlock profit, and assert that the new shares receive none of the pre-entry reward lot.",
+        "Cover rewards held as claimable GROVE, strategy-held GROVE, active-auction inventory, returned USDS, fee assessment, and profit unlock.",
+        "Fuzz incumbent assets, late deposit size, reward size, fee configuration, and report timing while asserting conservation of each cohort's reward entitlement."
+      ],
+      "rootCause": {
+        "evidenceRefs": [
+          "claimable-reward-state",
+          "report-realizes-rewards",
+          "strategy-reports-only-stake-and-asset",
+          "inherited-report-boundary-assets",
+          "deposit-mints-stale-priced-shares"
+        ],
+        "summary": "The violated invariant is that value earned before a deposit should remain attributable to the pre-entry share supply unless policy explicitly says otherwise. `GroveCompounder` exposes already-earned rewards but neither values nor reserves claimable or auction-pending GROVE, and it inherits share pricing from `lastTotalAssets`. A late deposit therefore mints at a stale asset value; the later report recognizes the old reward lot over the enlarged share supply."
+      },
+      "ruleId": "accounting.report-boundary-rewards",
+      "severity": {
+        "changeConditions": "Raise the rating if a deployed open strategy regularly accumulates large pre-entry reward lots and extraction remains reliably profitable after fees, gas, and capital duration. Lower or suppress it if all deployed strategies are closed to only trusted depositors or policy explicitly grants pending reward value to new shares.",
+        "level": "low",
+        "rationale": "The path causes repeatable cross-depositor reward-yield redistribution, not principal insolvency. Exploitation requires deposits to be open or the attacker to be allowlisted, material observable pending rewards, capital committed through auction settlement and profit unlock, and economics that exceed gas and opportunity cost."
+      },
+      "summary": "Share issuance uses inherited report-boundary assets while `GroveCompounder` leaves claimable and auction-pending GROVE outside that value. A depositor entering after rewards accrue but before their USDS proceeds are reported receives shares at the stale asset value and later receives a pro rata share of the pre-entry reward profit.",
+      "taxonomy": {
+        "category": "economic-accounting",
+        "cwe": [
+          "CWE-682",
+          "CWE-841"
+        ]
+      },
+      "title": "Late deposits can capture reward value accrued before entry",
+      "validation": {
+        "assertions": [
+          "The late depositor captures its post-entry share fraction of profit derived from the pre-entry reward lot.",
+          "Profit locking delays the capture until unlock but does not reserve the historical reward value for incumbent shares.",
+          "Closed, unlisted deposits revert, while an allowlisted depositor reaches the same path."
+        ],
+        "evidenceRefs": [
+          "claimable-reward-state",
+          "strategy-reports-only-stake-and-asset",
+          "inherited-report-boundary-assets",
+          "deposit-mints-stale-priced-shares"
+        ],
+        "limitations": [
+          "Permissionless exploitation requires deposits to be open; otherwise the attacker must be allowlisted.",
+          "Profitability depends on pending reward size, fees, gas, auction outcome, and capital opportunity cost."
+        ],
+        "method": "pinned mainnet-fork integration, negative controls, and bounded fuzz testing",
+        "summary": "With 10,000 USDS incumbent capital and 151.0226272378771 claimable GROVE, an equal late deposit received 10,000 shares at the stale 1:1 price. After the old reward lot settled and profit unlocked, the late depositor redeemed 10,007.629394531249999928 USDS; capture remained 6.865931249141758529 USDS with the default 10% performance fee. Four tests passed, including 32 bounded late-deposit amounts."
+      },
+      "writeup": {
+        "reportPath": "findings/late-deposit-reward-dilution/late-deposit-reward-dilution.md"
+      }
+    }
+  ],
+  "scanId": "52e78de5-d30b-456b-ac3b-3933c51278d2",
+  "schemaVersion": "1.0"
+}

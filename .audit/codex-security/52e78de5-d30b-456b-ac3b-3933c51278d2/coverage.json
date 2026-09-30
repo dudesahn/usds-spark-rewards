@@ -1,0 +1,188 @@
+{
+  "completeness": "partial",
+  "deferred": [
+    {
+      "id": "CAN-001",
+      "paths": [
+        "src/GroveCompounder.sol"
+      ],
+      "reason": "The zero-minimum direct-sale mechanism was confirmed, but a production-fork sandwich was unprofitable before gas and permanent loss was not proven.",
+      "surfaceIds": [
+        "direct-reward-sale"
+      ]
+    },
+    {
+      "id": "CAN-002",
+      "paths": [
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "reason": "The V3 spot-price mechanism was reproduced, but the live branch was dormant and no state-changing allocator consumer or loss was found.",
+      "surfaceIds": [
+        "oracle-integrity"
+      ]
+    },
+    {
+      "id": "CAN-003",
+      "paths": [
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "reason": "The one-quote V4 quorum weakness was reproduced, but no deployed consumer, manipulation-cost proof, or concrete loss was found.",
+      "surfaceIds": [
+        "oracle-integrity"
+      ]
+    },
+    {
+      "id": "CAN-004",
+      "paths": [
+        "src/libraries/UniswapV3SwapSimulatorCore.sol"
+      ],
+      "reason": "The modeled traversal stayed live at both 5M and 60M gas, and no selected smaller-spacing pool or consumer gas envelope was established.",
+      "surfaceIds": [
+        "oracle-integrity"
+      ]
+    },
+    {
+      "id": "CAN-005",
+      "paths": [
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "reason": "The reward-expiry equality mismatch was reproduced, but no persistent consumer action or loss was established.",
+      "surfaceIds": [
+        "oracle-integrity"
+      ]
+    },
+    {
+      "id": "CAN-007",
+      "paths": [
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "reason": "The instantaneous denominator mechanism was reproduced, but moving APR by 10% required about 24.66M USDS and no state-changing consumer was found.",
+      "surfaceIds": [
+        "oracle-integrity"
+      ]
+    }
+  ],
+  "documentType": "codex-security.coverage",
+  "excludePaths": [],
+  "explicitExclusions": [
+    {
+      "pattern": "src/test/**",
+      "reason": "Tests were excluded from discovery and used only for validation."
+    },
+    {
+      "pattern": "script/** and broadcast/**",
+      "reason": "Deployment scripts and broadcast artifacts are not first-party runtime production logic in the requested scope."
+    },
+    {
+      "pattern": "lib/**",
+      "reason": "Vendored dependencies were excluded from discovery and read only when directly relied on by an allowlisted production call path."
+    },
+    {
+      "pattern": ".audit/**, **/.scratchpad/**, x-ray/**, reports, and cached analysis",
+      "reason": "Prior audit and scanner material was excluded to prevent discovery seeding."
+    },
+    {
+      "pattern": "fixtures, build/cache outputs, and generated files",
+      "reason": "Transient or generated material was excluded from production discovery."
+    }
+  ],
+  "includePaths": [
+    "."
+  ],
+  "inventoryStrategy": "custom",
+  "mode": "deep_repository",
+  "openQuestions": [
+    {
+      "followUpPrompt": "Enumerate live direct-sale GroveCompounder deployments and run a pinned-fork search over realistic attacker sizes, pool liquidity, and gas.",
+      "question": "Does any deployed direct-sale strategy instance make CAN-001 profitable under real liquidity and gas?"
+    },
+    {
+      "followUpPrompt": "Trace all deployed consumers of GroveCompounderAprOracle output and identify allocator, limit, or accounting writes driven by the quoted APR.",
+      "question": "Is the APR oracle consumed by any security-sensitive state-changing production decision?"
+    },
+    {
+      "followUpPrompt": "Enumerate deployed GroveCompounder strategy/Auction pairs and read each reward-token enablement and governanceOnlyKick configuration.",
+      "question": "Which deployed strategy/Auction pairs retain public kick permission?"
+    }
+  ],
+  "scanId": "52e78de5-d30b-456b-ac3b-3933c51278d2",
+  "schemaVersion": "1.0",
+  "surfaces": [
+    {
+      "disposition": "no_issue_found",
+      "id": "strategy-lifecycle-custody-auth",
+      "label": "Strategy lifecycle, custody, authorization, staking, and PSM integrations",
+      "notes": "No unprivileged principal-transfer destination, reentrancy bypass, or first-party integration mismatch survived repeated discovery.",
+      "receiptRefs": [
+        "artifacts/03_coverage/repository_coverage_ledger.md"
+      ],
+      "riskArea": "Asset custody and privileged control"
+    },
+    {
+      "disposition": "needs_follow_up",
+      "id": "direct-reward-sale",
+      "label": "Direct reward sale slippage and transaction-ordering exposure",
+      "notes": "The zero-minimum mechanism is real, but the production-fork sandwich was unprofitable before gas and permanent loss was not established.",
+      "receiptRefs": [
+        "artifacts/05_findings/CAN-001/validation_report.md"
+      ],
+      "riskArea": "MEV and value realization"
+    },
+    {
+      "disposition": "needs_follow_up",
+      "id": "oracle-integrity",
+      "label": "APR oracle price, quorum, expiry, denominator, and traversal behavior",
+      "notes": "Five candidates were independently validated. Several mechanisms were reproduced, but no security-sensitive state-changing consumer or concrete loss was established.",
+      "receiptRefs": [
+        "artifacts/05_findings/CAN-002/validation_report.md",
+        "artifacts/05_findings/CAN-003/validation_report.md",
+        "artifacts/05_findings/CAN-004/validation_report.md",
+        "artifacts/05_findings/CAN-005/validation_report.md",
+        "artifacts/05_findings/CAN-007/validation_report.md"
+      ],
+      "riskArea": "Oracle integrity and availability"
+    },
+    {
+      "disposition": "not_applicable",
+      "id": "interfaces-non-evm",
+      "label": "Interface declarations and non-EVM vulnerability families",
+      "notes": "ABI-only declarations contain no independent enforcement, and the production scope contains no filesystem, query, HTTP, session, or deserialization surface.",
+      "receiptRefs": [
+        "artifacts/03_coverage/repository_coverage_ledger.md"
+      ],
+      "riskArea": "Interface-only and out-of-platform surfaces"
+    },
+    {
+      "disposition": "reported",
+      "id": "report-boundary-reward-accounting",
+      "label": "Report-boundary reward accounting and late-depositor value capture",
+      "notes": "A pinned mainnet-fork integration PoC confirmed that a late depositor can capture part of reward value accrued before entry.",
+      "receiptRefs": [
+        "artifacts/05_findings/CAN-006/validation_report.md",
+        "artifacts/05_findings/CAN-006/attack_path_analysis_report.md"
+      ],
+      "riskArea": "Cross-depositor economic accounting"
+    },
+    {
+      "disposition": "reported",
+      "id": "reward-auction-liveness",
+      "label": "Reward-auction state-machine liveness during strategy reports",
+      "notes": "A pinned mainnet-fork integration PoC confirmed that an active reward-token auction makes a later report revert and that public dust pre-kicks can renew the denial.",
+      "receiptRefs": [
+        "artifacts/05_findings/CAN-008/validation_report.md",
+        "artifacts/05_findings/CAN-008/attack_path_analysis_report.md"
+      ],
+      "riskArea": "Maintenance availability"
+    },
+    {
+      "disposition": "rejected",
+      "id": "simulator-signed-range",
+      "label": "V3 simulator oversized signed conversion",
+      "notes": "The cast changes semantics at or above 2^255, but the sole supported caller fixes the amount to 1e18 and no attacker-controlled consumer reaches the range.",
+      "receiptRefs": [
+        "artifacts/05_findings/CAN-009/validation_report.md"
+      ],
+      "riskArea": "Numeric type integrity"
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "52e78de5-d30b-456b-ac3b-3933c51278d2"
+      },
+      "properties": {
+        "codexSecuritySchemaVersion": "1.0",
+        "codexSecurityTargetKind": "git_revision"
+      },
+      "results": [
+        {
+          "level": "note",
+          "locations": [
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/GroveCompounder.sol"
+                },
+                "region": {
+                  "endLine": 118,
+                  "startLine": 84
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Share issuance uses inherited report-boundary assets while `GroveCompounder` leaves claimable and auction-pending GROVE outside that value. A depositor entering after rewards accrue but before their USDS proceeds are reported receives shares at the stale asset value and later receives a pro rata share of the pre-entry reward profit."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:f9fef9d89ccf14195e55a90e07bb949a6f0c6808b6226e17fd5ef2c78394ae0b"
+          },
+          "properties": {
+            "candidateId": "CAN-006",
+            "category": "economic-accounting",
+            "confidence": "high",
+            "findingId": "csf_b51d06995c5b3b21d7a6c516",
+            "occurrenceId": "occ_cf4b7b6914cb93718ef58d5d",
+            "severity": "low"
+          },
+          "relatedLocations": [
+            {
+              "id": 0,
+              "message": {
+                "text": "observable_state"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/GroveCompounder.sol"
+                },
+                "region": {
+                  "endLine": 72,
+                  "startLine": 70
+                }
+              }
+            },
+            {
+              "id": 2,
+              "message": {
+                "text": "concrete_implementation"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "lib/tokenized-strategy/src/BaseStrategy.sol"
+                },
+                "region": {
+                  "endLine": 244,
+                  "startLine": 225
+                }
+              }
+            },
+            {
+              "id": 3,
+              "message": {
+                "text": "entrypoint"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "lib/tokenized-strategy/src/TokenizedStrategy.sol"
+                },
+                "region": {
+                  "endLine": 540,
+                  "startLine": 516
+                }
+              }
+            }
+          ],
+          "ruleId": "accounting.report-boundary-rewards",
+          "ruleIndex": 0
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "message": {
+                "text": "root_control"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/GroveCompounder.sol"
+                },
+                "region": {
+                  "endLine": 109,
+                  "startLine": 107
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "`GroveCompounder` unconditionally transfers its reward balance to the configured Auction and calls `kick()` whenever rewards exceed the threshold. If that token's auction is already active, the Auction reverts with `too soon`, rolling back the keeper report. Under the relied-on default public-kick configuration, an unprivileged caller can donate one wei of GROVE, pre-kick the auction, and renew the denial after every auction window."
+          },
+          "partialFingerprints": {
+            "codexSecurity/v1": "codex-security/v1:sha256:534d8db1d5fccc4c538800f62807841d102a9b58de25ebd683623bca95d356c0"
+          },
+          "properties": {
+            "candidateId": "CAN-008",
+            "category": "denial-of-service",
+            "confidence": "high",
+            "findingId": "csf_caa09b28e81d6df8702f4f3b",
+            "occurrenceId": "occ_d89b750dd6f4abcb5093ceb2",
+            "severity": "medium"
+          },
+          "relatedLocations": [
+            {
+              "id": 1,
+              "message": {
+                "text": "sink"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/GroveCompounder.sol"
+                },
+                "region": {
+                  "endLine": 180,
+                  "startLine": 174
+                }
+              }
+            },
+            {
+              "id": 2,
+              "message": {
+                "text": "configuration"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/GroveCompounder.sol"
+                },
+                "region": {
+                  "endLine": 216,
+                  "startLine": 209
+                }
+              }
+            },
+            {
+              "id": 3,
+              "message": {
+                "text": "concrete_implementation"
+              },
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "lib/tokenized-strategy-periphery/src/Auctions/Auction.sol"
+                },
+                "region": {
+                  "endLine": 520,
+                  "startLine": 503
+                }
+              }
+            }
+          ],
+          "ruleId": "denial-of-service.auction-rekick",
+          "ruleIndex": 1
+        }
+      ],
+      "tool": {
+        "driver": {
+          "name": "Codex Security",
+          "rules": [
+            {
+              "id": "accounting.report-boundary-rewards",
+              "name": "accounting.report-boundary-rewards",
+              "properties": {
+                "tags": [
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "accounting.report-boundary-rewards"
+              }
+            },
+            {
+              "id": "denial-of-service.auction-rekick",
+              "name": "denial-of-service.auction-rekick",
+              "properties": {
+                "tags": [
+                  "security"
+                ]
+              },
+              "shortDescription": {
+                "text": "denial-of-service.auction-rekick"
+              }
+            }
+          ],
+          "version": "0.1.11"
+        }
+      },
+      "versionControlProvenance": [
+        {
+          "repositoryUri": "https://github.com/dudesahn/usds-spark-rewards.git",
+          "revisionId": "f8f796db93c52432cca0ed26861e94f5aaf20975"
+        }
+      ]
+    }
+  ],
+  "version": "2.1.0"
+}

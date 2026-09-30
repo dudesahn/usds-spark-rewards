@@ -1,0 +1,142 @@
+{
+  "version": 3,
+  "base_token": "0xb30fe1cf884b48a22a50d22a9282004f2c5e9406",
+  "quote_tokens": [
+    "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "0xdac17f958d2ee523a2206206994597c13d831ec7"
+  ],
+  "oracle_pool_ids": [
+    "0xde47849dd91a1d9b90a775776ae012cfc6eb2eb2ce0fe7c5be770038dd71ae4e",
+    "0x139e22b401c6df9596ee06815598b459f4d0777eb2e80961e5f87ed5a9beb298",
+    "0x0d40eef4d9600a37016f34d089705e83d8d9e40ac80838abb04a278fa049e874",
+    "0x799770994a3fc792ea684736316bebd2e2b9074a565c8a7ef64d45b2732e5618",
+    "0x01d7d2d4d500c84be381c7c90466a803f1c0713179e00ad0e4ed8683da39e513",
+    "0x2a2dfbb417f70fa3bfd09296f313b33a197fcba986d0b41705218d91b9544b14",
+    "0xaa0b1a90c6188f42c3603998536418f4eeedccf20b999377dab7e4c6aafc5286",
+    "0x2897b6ccd757711791a90b723df4f89567568859d040ff97d25cc4a5cb93ea03",
+    "0x9fe7fb249f5fdacc3c102cb8f9c5e5b59b70da2ea96377804bcb58328b93441f",
+    "0x20d117a32203158c46d0dce34ade2b2cbf846d151e9cea406e0463fe361d82ce"
+  ],
+  "pools": [
+    {
+      "pool_id": "0xde47849dd91a1d9b90a775776ae012cfc6eb2eb2ce0fe7c5be770038dd71ae4e",
+      "quote_token": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "last_seen_block": 25761300,
+      "last_seen_at": "2026-08-15T15:20:04Z",
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x139e22b401c6df9596ee06815598b459f4d0777eb2e80961e5f87ed5a9beb298",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 25761300,
+      "last_seen_at": "2026-08-15T15:20:04Z",
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x0d40eef4d9600a37016f34d089705e83d8d9e40ac80838abb04a278fa049e874",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 25761300,
+      "last_seen_at": "2026-08-15T15:20:04Z",
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x799770994a3fc792ea684736316bebd2e2b9074a565c8a7ef64d45b2732e5618",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 25755653,
+      "last_seen_at": "2026-08-14T20:25:35Z",
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x01d7d2d4d500c84be381c7c90466a803f1c0713179e00ad0e4ed8683da39e513",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 0,
+      "last_seen_at": "2026-08-13",
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x2a2dfbb417f70fa3bfd09296f313b33a197fcba986d0b41705218d91b9544b14",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 0,
+      "last_seen_at": "2026-08-13",
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0xaa0b1a90c6188f42c3603998536418f4eeedccf20b999377dab7e4c6aafc5286",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 0,
+      "last_seen_at": null,
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x2897b6ccd757711791a90b723df4f89567568859d040ff97d25cc4a5cb93ea03",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 0,
+      "last_seen_at": null,
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x9fe7fb249f5fdacc3c102cb8f9c5e5b59b70da2ea96377804bcb58328b93441f",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 0,
+      "last_seen_at": null,
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x20d117a32203158c46d0dce34ade2b2cbf846d151e9cea406e0463fe361d82ce",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 0,
+      "last_seen_at": null,
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x31c6aeb8a664ed9ef2ec68791e7043e1aee1481ab4507b227b179072c9e4871b",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 0,
+      "last_seen_at": null,
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    },
+    {
+      "pool_id": "0x0196d365448c076bec48dbf99a5575c1f081ae89a23de1fdaee1d5934c0b9699",
+      "quote_token": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "last_seen_block": 26006032,
+      "last_seen_at": "2026-09-18T17:58:41Z",
+      "last_contributed_block": 0,
+      "last_contributed_at": null,
+      "last_contribution_sources": [],
+      "last_contribution_quote_sizes": []
+    }
+  ]
+}

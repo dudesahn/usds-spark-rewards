@@ -1,0 +1,580 @@
+{
+  "meta": {
+    "repo": "/private/tmp/usds-grove-pashov-f8f796d-20260721T194201Z",
+    "src_dir": "src",
+    "generated_at": "2026-07-21T19:42:57.230279+00:00",
+    "git_head": "f8f796d",
+    "git_branch": "HEAD",
+    "total_commits": 21,
+    "total_source_files": 9,
+    "analysis_time_ms": 320
+  },
+  "repo_shape": {
+    "classification": "normal_dev",
+    "total_commits": 21,
+    "source_touching_commits": 18,
+    "bulk_import_sha": null,
+    "date_spread_days": 370,
+    "first_commit_date": "2025-07-03",
+    "last_commit_date": "2026-07-08",
+    "signals": [
+      "Date spread: 370 days",
+      "18 commits touch source files out of 21 total"
+    ]
+  },
+  "fix_candidates": [
+    {
+      "sha": "334030f",
+      "full_sha": "334030fddd5001ad8f354845de9b056cd9f12818",
+      "date": "2026-07-08",
+      "author": "dudesahn",
+      "subject": "fix: harden grove reward pricing",
+      "score": 16,
+      "reasons": [
+        "bug fix",
+        "adds runtime guards (+12/-1)",
+        "changes token transfer logic",
+        "changes accounting/balance logic",
+        "spans 4 security domains (access_control, fund_flows, oracle_price, state_machines)",
+        "focused change (2 source files)",
+        "includes test changes"
+      ],
+      "source_files_touched": [
+        "src/GroveCompounder.sol",
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "test_changed": true,
+      "lines_changed": 340
+    },
+    {
+      "sha": "087c8aa",
+      "full_sha": "087c8aa1f67d5335538b50b2fe0f44f7fab70f17",
+      "date": "2026-07-07",
+      "author": "dudesahn",
+      "subject": "fix: guard grove psm swaps",
+      "score": 14,
+      "reasons": [
+        "bug fix",
+        "adds runtime guards (+1/-0)",
+        "changes accounting/balance logic",
+        "spans 2 security domains (fund_flows, state_machines)",
+        "focused change (2 source files)",
+        "includes test changes"
+      ],
+      "source_files_touched": [
+        "src/GroveCompounder.sol",
+        "src/interfaces/IPsmWrapper.sol"
+      ],
+      "test_changed": true,
+      "lines_changed": 5
+    },
+    {
+      "sha": "872efb4",
+      "full_sha": "872efb476011efcecb596d5eeb3cd9a4bf688e68",
+      "date": "2026-07-07",
+      "author": "dudesahn",
+      "subject": "feat: make grove oracle pools configurable",
+      "score": 9,
+      "reasons": [
+        "feature addition",
+        "adds runtime guards (+4/-1)",
+        "changes accounting/balance logic",
+        "spans 4 security domains (access_control, fund_flows, oracle_price, state_machines)",
+        "focused change (2 source files)",
+        "includes test changes"
+      ],
+      "source_files_touched": [
+        "src/GroveCompounder.sol",
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "test_changed": true,
+      "lines_changed": 136
+    },
+    {
+      "sha": "6fa8d24",
+      "full_sha": "6fa8d247018e0ee1ddbe5c35e7f7f0681fbe8734",
+      "date": "2025-07-08",
+      "author": "dudesahn",
+      "subject": "fix: staking case",
+      "score": 9,
+      "reasons": [
+        "bug fix",
+        "rewrites runtime guards (+2/-2)",
+        "changes accounting/balance logic",
+        "focused change (1 source files)"
+      ],
+      "source_files_touched": [
+        "src/Strategy.sol"
+      ],
+      "test_changed": false,
+      "lines_changed": 22
+    },
+    {
+      "sha": "f164201",
+      "full_sha": "f164201cd7556c92475634b46220c63f6e005728",
+      "date": "2025-07-08",
+      "author": "dudesahn",
+      "subject": "fix: solc version",
+      "score": 9,
+      "reasons": [
+        "bug fix",
+        "spans 2 security domains (oracle_price, state_machines)",
+        "focused change (2 source files)"
+      ],
+      "source_files_touched": [
+        "src/libraries/UniswapV3SwapSimulator.sol",
+        "src/libraries/UniswapV3SwapSimulatorCore.sol"
+      ],
+      "test_changed": false,
+      "lines_changed": 4
+    },
+    {
+      "sha": "94b7b58",
+      "full_sha": "94b7b58ee9e9bd89a349e9daa50b0ee1db3b9849",
+      "date": "2026-07-07",
+      "author": "dudesahn",
+      "subject": "feat: add grove v4 oracle fallback",
+      "score": 8,
+      "reasons": [
+        "feature addition",
+        "rewrites runtime guards (+1/-1)",
+        "changes accounting/balance logic",
+        "spans 3 security domains (access_control, fund_flows, oracle_price)",
+        "focused change (2 source files)",
+        "includes test changes"
+      ],
+      "source_files_touched": [
+        "src/interfaces/IUniswapV4StateView.sol",
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "test_changed": true,
+      "lines_changed": 72
+    },
+    {
+      "sha": "2b20055",
+      "full_sha": "2b200553f66ec3fcf1ef52b114c64e18ca09b9ed",
+      "date": "2026-07-07",
+      "author": "dudesahn",
+      "subject": "feat: port compounder to grove",
+      "score": 8,
+      "reasons": [
+        "feature addition",
+        "rewrites runtime guards (+2/-2)",
+        "changes accounting/balance logic",
+        "spans 3 security domains (access_control, fund_flows, oracle_price)",
+        "focused change (3 source files)",
+        "includes test changes"
+      ],
+      "source_files_touched": [
+        "src/interfaces/IStrategyInterface.sol",
+        "src/periphery/GroveCompounderAprOracle.sol",
+        "src/periphery/SparkCompounderAprOracle.sol"
+      ],
+      "test_changed": true,
+      "lines_changed": 190
+    },
+    {
+      "sha": "e2f8b23",
+      "full_sha": "e2f8b23272c06d26b347b7b16e6783230577f517",
+      "date": "2026-07-07",
+      "author": "dudesahn",
+      "subject": "fix: return zero apr after rewards end",
+      "score": 8,
+      "reasons": [
+        "bug fix",
+        "changes signature/auth handling",
+        "focused change (1 source files)"
+      ],
+      "source_files_touched": [
+        "src/periphery/SparkCompounderAprOracle.sol"
+      ],
+      "test_changed": false,
+      "lines_changed": 4
+    },
+    {
+      "sha": "9fde0cc",
+      "full_sha": "9fde0cc6a28dcbc10132be3941dccf26437255cf",
+      "date": "2025-07-03",
+      "author": "dudesahn",
+      "subject": "Initial commit",
+      "score": 8,
+      "reasons": [
+        "unclassified",
+        "adds runtime guards (+1/-0)",
+        "changes token transfer logic",
+        "changes accounting/balance logic",
+        "touches fund_flows code",
+        "includes test changes"
+      ],
+      "source_files_touched": [
+        "src/Strategy.sol",
+        "src/StrategyFactory.sol",
+        "src/interfaces/IStrategyInterface.sol",
+        "src/periphery/StrategyAprOracle.sol"
+      ],
+      "test_changed": true,
+      "lines_changed": 368
+    },
+    {
+      "sha": "054f923",
+      "full_sha": "054f923fe42efebb1cfce32a55617e5c1fdf80c2",
+      "date": "2025-07-07",
+      "author": "dudesahn",
+      "subject": "fix: uppercase for constant",
+      "score": 7,
+      "reasons": [
+        "bug fix",
+        "changes accounting/balance logic",
+        "focused change (1 source files)"
+      ],
+      "source_files_touched": [
+        "src/Strategy.sol"
+      ],
+      "test_changed": false,
+      "lines_changed": 2
+    }
+  ],
+  "dangerous_area_changes": {
+    "access_control": {
+      "commit_count": 4,
+      "files": [
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "commits": [
+        {
+          "sha": "334030f",
+          "date": "2026-07-08",
+          "subject": "fix: harden grove reward pricing"
+        },
+        {
+          "sha": "872efb4",
+          "date": "2026-07-07",
+          "subject": "feat: make grove oracle pools configurable"
+        },
+        {
+          "sha": "94b7b58",
+          "date": "2026-07-07",
+          "subject": "feat: add grove v4 oracle fallback"
+        },
+        {
+          "sha": "2b20055",
+          "date": "2026-07-07",
+          "subject": "feat: port compounder to grove"
+        }
+      ]
+    },
+    "fund_flows": {
+      "commit_count": 12,
+      "files": [
+        "src/GroveCompounder.sol",
+        "src/interfaces/IStaking.sol",
+        "src/interfaces/IStrategyInterface.sol",
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "commits": [
+        {
+          "sha": "f8f796d",
+          "date": "2026-07-08",
+          "subject": "refactor: use base healthcheck open setter"
+        },
+        {
+          "sha": "334030f",
+          "date": "2026-07-08",
+          "subject": "fix: harden grove reward pricing"
+        },
+        {
+          "sha": "872efb4",
+          "date": "2026-07-07",
+          "subject": "feat: make grove oracle pools configurable"
+        },
+        {
+          "sha": "8f6a7bb",
+          "date": "2026-07-07",
+          "subject": "chore: update yearn strategy libs"
+        },
+        {
+          "sha": "087c8aa",
+          "date": "2026-07-07",
+          "subject": "fix: guard grove psm swaps"
+        },
+        {
+          "sha": "94b7b58",
+          "date": "2026-07-07",
+          "subject": "feat: add grove v4 oracle fallback"
+        },
+        {
+          "sha": "2b20055",
+          "date": "2026-07-07",
+          "subject": "feat: port compounder to grove"
+        },
+        {
+          "sha": "d15b1f2",
+          "date": "2025-07-12",
+          "subject": "chore: simulate rewards top up"
+        },
+        {
+          "sha": "3f4ef47",
+          "date": "2025-07-10",
+          "subject": "refactor: minor updates"
+        },
+        {
+          "sha": "aac065e",
+          "date": "2025-07-08",
+          "subject": "chore: slither"
+        },
+        {
+          "sha": "dbd6a0e",
+          "date": "2025-07-04",
+          "subject": "feat: spark compounder"
+        },
+        {
+          "sha": "9fde0cc",
+          "date": "2025-07-03",
+          "subject": "Initial commit"
+        }
+      ]
+    },
+    "oracle_price": {
+      "commit_count": 8,
+      "files": [
+        "src/interfaces/IOracle.sol",
+        "src/interfaces/IUniswapV4StateView.sol",
+        "src/libraries/UniswapV3SwapSimulator.sol",
+        "src/libraries/UniswapV3SwapSimulatorCore.sol",
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "commits": [
+        {
+          "sha": "334030f",
+          "date": "2026-07-08",
+          "subject": "fix: harden grove reward pricing"
+        },
+        {
+          "sha": "872efb4",
+          "date": "2026-07-07",
+          "subject": "feat: make grove oracle pools configurable"
+        },
+        {
+          "sha": "94b7b58",
+          "date": "2026-07-07",
+          "subject": "feat: add grove v4 oracle fallback"
+        },
+        {
+          "sha": "2b20055",
+          "date": "2026-07-07",
+          "subject": "feat: port compounder to grove"
+        },
+        {
+          "sha": "bfda23f",
+          "date": "2025-09-16",
+          "subject": "feat: oracle"
+        },
+        {
+          "sha": "aac065e",
+          "date": "2025-07-08",
+          "subject": "chore: slither"
+        },
+        {
+          "sha": "f164201",
+          "date": "2025-07-08",
+          "subject": "fix: solc version"
+        },
+        {
+          "sha": "dbd6a0e",
+          "date": "2025-07-04",
+          "subject": "feat: spark compounder"
+        }
+      ]
+    },
+    "state_machines": {
+      "commit_count": 10,
+      "files": [
+        "src/GroveCompounder.sol",
+        "src/interfaces/IStaking.sol",
+        "src/libraries/UniswapV3SwapSimulatorCore.sol"
+      ],
+      "commits": [
+        {
+          "sha": "f8f796d",
+          "date": "2026-07-08",
+          "subject": "refactor: use base healthcheck open setter"
+        },
+        {
+          "sha": "334030f",
+          "date": "2026-07-08",
+          "subject": "fix: harden grove reward pricing"
+        },
+        {
+          "sha": "872efb4",
+          "date": "2026-07-07",
+          "subject": "feat: make grove oracle pools configurable"
+        },
+        {
+          "sha": "8f6a7bb",
+          "date": "2026-07-07",
+          "subject": "chore: update yearn strategy libs"
+        },
+        {
+          "sha": "087c8aa",
+          "date": "2026-07-07",
+          "subject": "fix: guard grove psm swaps"
+        },
+        {
+          "sha": "d15b1f2",
+          "date": "2025-07-12",
+          "subject": "chore: simulate rewards top up"
+        },
+        {
+          "sha": "3f4ef47",
+          "date": "2025-07-10",
+          "subject": "refactor: minor updates"
+        },
+        {
+          "sha": "aac065e",
+          "date": "2025-07-08",
+          "subject": "chore: slither"
+        },
+        {
+          "sha": "f164201",
+          "date": "2025-07-08",
+          "subject": "fix: solc version"
+        },
+        {
+          "sha": "dbd6a0e",
+          "date": "2025-07-04",
+          "subject": "feat: spark compounder"
+        }
+      ]
+    }
+  },
+  "late_changes": {
+    "window_days": 30,
+    "cutoff_date": "2026-06-08",
+    "latest_commit_date": "2026-07-08",
+    "late_commits": [
+      {
+        "sha": "f8f796d",
+        "date": "2026-07-08",
+        "author": "dudesahn",
+        "subject": "refactor: use base healthcheck open setter",
+        "source_files": [
+          "src/GroveCompounder.sol",
+          "src/interfaces/IStrategyInterface.sol"
+        ],
+        "test_changed": true,
+        "lines_changed": 18
+      },
+      {
+        "sha": "334030f",
+        "date": "2026-07-08",
+        "author": "dudesahn",
+        "subject": "fix: harden grove reward pricing",
+        "source_files": [
+          "src/GroveCompounder.sol",
+          "src/periphery/GroveCompounderAprOracle.sol"
+        ],
+        "test_changed": true,
+        "lines_changed": 340
+      },
+      {
+        "sha": "872efb4",
+        "date": "2026-07-07",
+        "author": "dudesahn",
+        "subject": "feat: make grove oracle pools configurable",
+        "source_files": [
+          "src/GroveCompounder.sol",
+          "src/periphery/GroveCompounderAprOracle.sol"
+        ],
+        "test_changed": true,
+        "lines_changed": 136
+      },
+      {
+        "sha": "8f6a7bb",
+        "date": "2026-07-07",
+        "author": "dudesahn",
+        "subject": "chore: update yearn strategy libs",
+        "source_files": [
+          "src/GroveCompounder.sol",
+          "src/interfaces/IStrategyInterface.sol"
+        ],
+        "test_changed": true,
+        "lines_changed": 46
+      },
+      {
+        "sha": "087c8aa",
+        "date": "2026-07-07",
+        "author": "dudesahn",
+        "subject": "fix: guard grove psm swaps",
+        "source_files": [
+          "src/GroveCompounder.sol",
+          "src/interfaces/IPsmWrapper.sol"
+        ],
+        "test_changed": true,
+        "lines_changed": 5
+      },
+      {
+        "sha": "94b7b58",
+        "date": "2026-07-07",
+        "author": "dudesahn",
+        "subject": "feat: add grove v4 oracle fallback",
+        "source_files": [
+          "src/interfaces/IUniswapV4StateView.sol",
+          "src/periphery/GroveCompounderAprOracle.sol"
+        ],
+        "test_changed": true,
+        "lines_changed": 72
+      },
+      {
+        "sha": "2b20055",
+        "date": "2026-07-07",
+        "author": "dudesahn",
+        "subject": "feat: port compounder to grove",
+        "source_files": [
+          "src/interfaces/IStrategyInterface.sol",
+          "src/periphery/GroveCompounderAprOracle.sol",
+          "src/periphery/SparkCompounderAprOracle.sol"
+        ],
+        "test_changed": true,
+        "lines_changed": 190
+      },
+      {
+        "sha": "e2f8b23",
+        "date": "2026-07-07",
+        "author": "dudesahn",
+        "subject": "fix: return zero apr after rewards end",
+        "source_files": [
+          "src/periphery/SparkCompounderAprOracle.sol"
+        ],
+        "test_changed": false,
+        "lines_changed": 4
+      }
+    ],
+    "source_without_test_count": 1,
+    "total_late_source_commits": 8
+  },
+  "forked_deps": {
+    "detected_libs": [],
+    "removed_submodules": []
+  },
+  "tech_debt": {
+    "total_count": 0,
+    "items": [],
+    "files_with_debt": 0,
+    "capped": false
+  },
+  "dev_patterns": {
+    "test_co_change_rate": 0.667,
+    "fix_without_test_rate": 0.4,
+    "avg_commit_size": 129.8,
+    "avg_commit_size_note": null,
+    "single_developer_pct": 1.0,
+    "top_contributor": "dudesahn",
+    "contributor_breakdown": [
+      {
+        "author": "dudesahn",
+        "lines_added": 1699,
+        "pct": 1.0
+      }
+    ]
+  }
+}

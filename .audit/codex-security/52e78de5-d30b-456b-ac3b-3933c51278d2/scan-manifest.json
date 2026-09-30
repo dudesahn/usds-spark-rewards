@@ -1,0 +1,157 @@
+{
+  "documentType": "codex-security.scan-manifest",
+  "scan": {
+    "artifacts": [
+      {
+        "mediaType": "application/json",
+        "path": "findings.json",
+        "sha256": "3bfc7597ced36cfcf20dc4a50d752050ab21d5f862a3399f65274248fa4d4779"
+      },
+      {
+        "mediaType": "application/json",
+        "path": "coverage.json",
+        "sha256": "76648b8fe32c0597ecb8d809eb6a534a030ecea106bf09c2d60ebddb0446e302"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/03_coverage/repository_coverage_ledger.md",
+        "sha256": "ababbe064cdec9a698f84c0ea46ecc560e090269de5d1d8cbac5e95d6c81c652"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-001/validation_report.md",
+        "sha256": "99f9ee5a7cb73b7cd9effd4ae0b89794a6b073ab0dfcacca0927c8011058ae90"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-002/validation_report.md",
+        "sha256": "f4afde56d42da86b1a040959d54a41011f717835f5c8d13890b9a74e59a3fdb9"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-003/validation_report.md",
+        "sha256": "fc2c96585f202b39e0c4f2acb92ba324b0cb8fdb2e2ef8376602d7db39ebb97f"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-004/validation_report.md",
+        "sha256": "491d8fac0f8d9a4debae9c83f8978dc1c9418d0378d4022ca36169bddee3c312"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-005/validation_report.md",
+        "sha256": "25139ab12037c70f46eda09e4cb7886c6d06684c5c644814b84180cc7769d79e"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-006/attack_path_analysis_report.md",
+        "sha256": "c8e88ed79f5327bd2a9c1555a3d123ac1efda3be48b1291ae535fef75a0f491c"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-006/validation_report.md",
+        "sha256": "4c72d3e2d3c26f4db583b7265c7945e0b48610e5d093e6a3606a3f9f12e984f0"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-007/validation_report.md",
+        "sha256": "ef740793dee4cd11f0917128992d1c2efd39a52ac2d2b884cdf6e4c8c688f006"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-008/attack_path_analysis_report.md",
+        "sha256": "a2e0f011ddd68c5cbfd5bb803542144e13b77168a2f79f102222456fe55ea600"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-008/validation_report.md",
+        "sha256": "81cbf0530af6ab7cec62653c1e12f3b888b2f9bbfcf2cf97be5bdfd191ec704b"
+      },
+      {
+        "mediaType": "application/octet-stream",
+        "path": "artifacts/05_findings/CAN-009/validation_report.md",
+        "sha256": "bb77766916c216036c2b2ceee5e9b75dfd89afd773ec5b0cc52528f6e1d37053"
+      }
+    ],
+    "completedAt": "2026-07-21T22:24:24Z",
+    "coverageRef": "coverage.json",
+    "findingsRef": "findings.json",
+    "hardening": {
+      "portfolioPath": "hardening/hardening.md"
+    },
+    "id": "52e78de5-d30b-456b-ac3b-3933c51278d2",
+    "producer": {
+      "name": "codex-security-plugin",
+      "version": "0.1.11"
+    },
+    "scope": {
+      "artifactsReviewed": [
+        "src/GroveCompounder.sol",
+        "src/interfaces/IOracle.sol",
+        "src/interfaces/IPsmWrapper.sol",
+        "src/interfaces/IStaking.sol",
+        "src/interfaces/IStrategyInterface.sol",
+        "src/interfaces/IUniswapV4StateView.sol",
+        "src/libraries/UniswapV3SwapSimulator.sol",
+        "src/libraries/UniswapV3SwapSimulatorCore.sol",
+        "src/periphery/GroveCompounderAprOracle.sol"
+      ],
+      "context": "Discovery stopped after five complete passes when the latest pass produced no new GroveCompounder cluster, consistent with the user's narrowed saturation condition. Existing oracle and library candidates were still independently validated but were not used to trigger another discovery loop.",
+      "excludePaths": [],
+      "includePaths": [
+        "."
+      ],
+      "limitations": [
+        "The scan did not enumerate every currently deployed strategy/Auction pair or its exact live configuration.",
+        "Oracle candidates remain deferred because no security-sensitive state-changing production consumer or concrete loss was established.",
+        "Tests, scripts, fixtures, vendored dependencies, prior audit artifacts, and generated outputs were excluded from discovery by policy."
+      ],
+      "runtimeStatus": "Pinned mainnet-fork validation completed for both reportable findings. CAN-008: 3 tests passed including 16 fuzz runs. CAN-006: 4 tests passed including 32 fuzz runs. All Forge output, caches, logs, PoCs, and disposable checkouts remained scan-local.",
+      "summary": "Deep production-code review of an explicit nine-file first-party Solidity allowlist. Tests and directly relied-on vendored implementations were used only to validate production paths; prior audit material and generated outputs did not seed discovery.",
+      "validationMode": "Repeated independent discovery followed by semantic reconciliation, centralized counterevidence validation, production-fork PoCs, and independent attack-path severity analysis."
+    },
+    "sealedAt": "2026-07-21T22:24:24Z",
+    "startedAt": "2026-07-21T19:47:56Z",
+    "status": "completed",
+    "target": {
+      "displayName": "codex-security-usds-spark-rewards-f8f796d-019f8637",
+      "kind": "git_revision",
+      "remote": "https://github.com/dudesahn/usds-spark-rewards.git",
+      "revision": "f8f796db93c52432cca0ed26861e94f5aaf20975",
+      "targetId": "target_sha256_a8b04aa8bc032f52edf942579e0a56f881a39a31961258795c0d6da107c9c302"
+    },
+    "threatModel": {
+      "assets": [
+        "Depositor USDS principal and strategy shares",
+        "Accrued GROVE reward value and its attribution among depositor cohorts",
+        "Report availability, `lastReport`, and timely reward recognition",
+        "Integrity of APR information exposed to downstream consumers"
+      ],
+      "assumptions": [
+        "Management, keepers, and governance follow their intended roles and do not intentionally misconfigure or steal assets",
+        "Fixed external protocols are not themselves compromised, while their documented public state transitions remain adversarially reachable",
+        "Economic findings require a concrete cross-actor outcome and realistic capital/timing path, not mechanism-only price movement"
+      ],
+      "attackerCapabilities": [
+        "Submit and order public blockchain transactions and observe pending or accrued reward state",
+        "Deposit when the strategy is open or when included on its allowlist",
+        "Acquire and donate dust amounts of GROVE and call public external-contract entrypoints",
+        "Manipulate public market state subject to real capital, liquidity, gas, and timing constraints"
+      ],
+      "securityObjectives": [
+        "Preserve depositor principal and prevent unauthorized cross-depositor value transfer",
+        "Attribute pre-entry rewards to the share supply that earned them unless an explicit policy states otherwise",
+        "Keep authorized reports and maintenance live under attacker-influenced external states",
+        "Prevent untrusted market state from causing security-sensitive decisions without adequate integrity controls"
+      ],
+      "summary": "The strategy holds depositor USDS, stakes it through fixed external protocols, realizes GROVE rewards through an Auction or direct swap, and exposes inherited share/report accounting. The primary adversaries are unprivileged blockchain accounts and untrusted depositors; management, keepers, and governance are trusted but must remain safe when consuming attacker-influenced external state.",
+      "trustBoundaries": [
+        "Public depositors crossing into inherited share issuance and report-boundary accounting",
+        "Public Auction callers influencing external state consumed by keeper-only reports",
+        "GroveCompounder calls into fixed staking, PSM, Uniswap, and Auction implementations",
+        "Management-controlled configuration crossing into unprivileged runtime behavior"
+      ]
+    }
+  },
+  "schemaVersion": "1.0"
+}

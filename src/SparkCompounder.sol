@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity 0.8.28;
 
-import {BaseHealthCheck, ERC20} from "@periphery/Bases/HealthCheck/BaseHealthCheck.sol";
+import {BaseHealthCheck, ERC20} from "@spark-periphery/Bases/HealthCheck/BaseHealthCheck.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
-import {Auction} from "@periphery/Auctions/Auction.sol";
+import {UniswapV3Swapper} from "@spark-periphery/swappers/UniswapV3Swapper.sol";
+import {Auction} from "@spark-periphery/Auctions/Auction.sol";
 import {IStaking} from "src/interfaces/IStaking.sol";
 import {IPsmWrapper} from "src/interfaces/IPsmWrapper.sol";
 
