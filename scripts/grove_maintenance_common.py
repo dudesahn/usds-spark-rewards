@@ -97,6 +97,50 @@ def format_price(price, unit="USDC"):
     return "{:.8f} {}/GROVE".format(price / 10**18, unit)
 
 
+def section(title):
+    print("\n{}".format(title))
+    print("-" * len(title))
+
+
+def field(label, value):
+    print("  {:<18} {}".format(label, value))
+
+
+def status(level, message):
+    icon = {
+        "OK": "✅", "KEEP": "✅", "UPDATED": "✅", "INFO": "ℹ️",
+        "WARN": "⚠️", "REVIEW": "⚠️", "ACTION": "⚠️", "ERROR": "❌",
+        "PREVIEW": "👀", "WAIT": "⏳", "SKIP": "ℹ️", "SEND": "🔄",
+    }.get(level, "•")
+    print("  {} {}: {}".format(icon, level, message))
+
+
+def format_age(seconds):
+    minutes = max(0, int(seconds)) // 60
+    days, minutes = divmod(minutes, 24 * 60)
+    hours, minutes = divmod(minutes, 60)
+    if days:
+        return "{}d {}h".format(days, hours)
+    if hours:
+        return "{}h {}m".format(hours, minutes)
+    return "{}m".format(minutes) if minutes else "<1m"
+
+
+def print_quotes(routes, reference_amount=None):
+    print("  {:>12}  {:>16}  {:>14}  {}".format(
+        "GROVE", "USDC proceeds", "USDC/GROVE", "Use" if reference_amount else ""
+    ).rstrip())
+    for route in routes:
+        amount_in, amount_out = int(route["amountIn"]), int(route["amountOut"])
+        purpose = ""
+        if reference_amount is not None:
+            purpose = "refresh + floor" if amount_in == reference_amount else "comparison only"
+        price = amount_out * 10**30 // amount_in
+        print("  {:>12,}  {:>16,.6f}  {:>14.8f}  {}".format(
+            amount_in // 10**18, amount_out / 10**6, price / 10**18, purpose
+        ).rstrip())
+
+
 def load_authorized_account(accounts, description, is_authorized):
     account_name = os.environ.get("BROWNIE_ACCOUNT", DEFAULT_BROWNIE_ACCOUNT)
     sender = accounts.load(account_name)
@@ -124,20 +168,22 @@ def validate_mainnet_deployment(contract_factory, oracle_address, strategy_addre
                 expected_oracle,
             )
         )
-    print("Yearn APR registry: strategy is linked to the expected oracle.")
+    status("OK", "Yearn APR registry links this strategy to the expected oracle.")
 
     vault_address = address_env("USDS_1_VAULT", USDS_1_VAULT)
     vault = load_contract(contract_factory, vault_address, ("get_default_queue",))
     queue = [normalize_hex(address) for address in vault.get_default_queue()]
     strategy_in_queue = normalize_hex(strategy_address) in queue
     if strategy_in_queue:
-        print("USDS-1 queue: strategy is present.")
+        status("OK", "Strategy is in the USDS-1 default queue.")
     else:
-        print(
-            "WARNING: strategy {} is not in the USDS-1 default queue {}.".format(
-                strategy_address, vault_address
-            )
+        status(
+            "WARN", "Strategy is not in the USDS-1 default queue; check whether this is intended."
         )
+    if env_bool("VERBOSE"):
+        field("Strategy", strategy_address)
+        field("APR oracle", oracle_address)
+        field("USDS-1 vault", vault_address)
     return strategy_in_queue
 
 

@@ -14,6 +14,7 @@ the recommendation differs by at least 10%.
 
 No transaction is sent unless ``BROADCAST=true``. Contract loading leaves
 Brownie's deployment cache unchanged and uses no handwritten ABIs.
+Set VERBOSE=true to include full deployment addresses.
 
 Examples:
 
@@ -42,6 +43,11 @@ try:
         format_price as _format_price,
         load_authorized_account,
         load_contract,
+        field,
+        format_age,
+        print_quotes,
+        section,
+        status,
         positive_int_env,
         require_mainnet,
         validate_mainnet_deployment,
@@ -61,6 +67,11 @@ except ModuleNotFoundError as error:
         format_price as _format_price,
         load_authorized_account,
         load_contract,
+        field,
+        format_age,
+        print_quotes,
+        section,
+        status,
         positive_int_env,
         require_mainnet,
         validate_mainnet_deployment,
@@ -107,29 +118,28 @@ def _kyber_quote_amount():
     return grove_amount * 10**18
 
 
-
-def _print_kyber_comparison_quotes(reference_amount):
+def _print_kyber_comparison_quotes(reference_amount, reference_routes=()):
     timeout = positive_int_env("KYBER_TIMEOUT", 30)
+    routes = list(reference_routes)
+    failures = []
     for grove_amount in (500_000, 1_000_000):
         amount_in = grove_amount * 10**18
         if amount_in == reference_amount:
-            continue  # Already printed as the operator-selected reference quote.
+            continue  # Already fetched as the operator-selected reference quote.
         try:
-            price, route = _fetch_kyber_price(amount_in, timeout)
-            print(
-                "Kyber comparison: {:,} GROVE -> {:,.6f} USDC ({})".format(
-                    grove_amount, int(route["amountOut"]) / 10**6, _format_price(price)
-                )
-            )
+            _, route = _fetch_kyber_price(amount_in, timeout)
+            routes.append(route)
         except Exception as error:
-            print("WARNING: Kyber comparison failed for {:,} GROVE: {}".format(
-                grove_amount, error
-            ))
+            failures.append((grove_amount, error))
+    print("\n  Kyber quotes (GROVE -> USDC)")
+    print_quotes(routes, reference_amount)
+    for grove_amount, error in failures:
+        status("WARN", "Comparison unavailable for {:,} GROVE: {}".format(grove_amount, error))
 
 
 def _interactive_confirm(message):
     if not sys.stdin.isatty():
-        print("Confirmation skipped because stdin is not interactive.")
+        status("WARN", "Confirmation requires an interactive terminal; update skipped.")
         return False
     return click.confirm(message, default=False)
 
@@ -154,71 +164,72 @@ def _refresh_reason(stored_price, age, deviation):
     return None
 
 
-def _refresh_from_kyber(oracle, quote_amount, stored_price, age, broadcast):
+def _refresh_from_kyber(
+    oracle, quote_amount, stored_price, age, broadcast, quote_rows=None, result_lines=None
+):
+    def result(level, message):
+        if result_lines is None:
+            status(level, message)
+        else:
+            result_lines.append((level, message))
+
     quoted_price, route = _fetch_kyber_price(
         quote_amount, positive_int_env("KYBER_TIMEOUT", 30)
     )
-    print("Price source: unrestricted Kyber executable quote")
-    print(
-        "Kyber quote: {:,} GROVE -> {:,.6f} USDC".format(
-            int(route["amountIn"]) // 10**18, int(route["amountOut"]) / 10**6
-        )
-    )
-    print("Reference price: {} (no haircut)".format(_format_price(quoted_price)))
+    if quote_rows is not None:
+        quote_rows.append(route)
 
     deviation = _deviation_bps(quoted_price, stored_price)
     massive = stored_price and deviation > int(oracle.MAX_LIVE_PRICE_DEVIATION_BPS())
     if massive:
-        print(
-            "ALERT: proposed Kyber price is {} bps away from the stored price.".format(
-                deviation
-            )
-        )
+        status("REVIEW", "Price move exceeds the confirmation threshold ({:.2f}%).".format(deviation / 100))
         if not broadcast:
-            print("Broadcast mode would ask whether to confirm this reference price.")
+            result("PREVIEW", "Reference update needs confirmation in BROADCAST mode; no transaction sent.")
             return quoted_price, "Kyber reference (update awaiting confirmation)"
         if not _interactive_confirm(
             "Store {} as the new GROVE reference price?".format(_format_price(quoted_price))
         ):
+            result("KEEP", "Reference update was not confirmed; stored price unchanged.")
             return quoted_price, "Kyber reference (update not confirmed)"
 
     reason = _refresh_reason(stored_price, age, deviation)
     if reason is None:
-        print(
-            "Reference-price update: skipped "
-            "({} bps move; stored reference under 36 hours old).".format(deviation)
-        )
+        result("KEEP", "No reference update needed: age <36h and price move <10%.")
         return quoted_price, "Kyber reference (stored reference unchanged)"
 
     if broadcast:
+        status("SEND", "Store {} from the {:,} GROVE quote: {}.".format(
+            _format_price(quoted_price), quote_amount // 10**18, reason
+        ))
         sender = _load_authorized_account(oracle)
         transaction = oracle.setGrovePrice(quoted_price, {"from": sender})
-        print("Reference-price transaction ({}): {}".format(reason, transaction.txid))
+        result("UPDATED", "Stored reference price refreshed ({}).".format(reason))
+        field("Transaction", transaction.txid)
     else:
-        print(
-            "Dry run: the raw Kyber price would become the stored reference "
-            "because {}.".format(reason)
-        )
+        result("PREVIEW", "Would store {}: {}. No transaction sent.".format(
+            _format_price(quoted_price), reason
+        ))
     return quoted_price, "Kyber executable reference"
 
 
 def _print_oracle_status(oracle, strategy_address):
     selected_price, raw_status = oracle.grovePriceWithStatus()
     selected_price = int(selected_price)
-    status = int(raw_status)
-    print(
-        "Effective oracle price: {} ({})".format(
-            _format_price(selected_price),
-            PRICE_STATUS_NAMES.get(status, "unknown status {}".format(status)),
-        )
-    )
+    price_status = int(raw_status)
+    print()
+    field("Oracle uses", _format_price(selected_price))
+    field("Selected source", PRICE_STATUS_NAMES.get(price_status, "unknown status {}".format(price_status)))
     oracle_apr = int(oracle.aprAfterDebtChange(strategy_address, 0))
-    print("Estimated current APR: {:.4f}%".format(oracle_apr / 10**16))
+    field("Estimated APR", "{:.4f}% (strategy oracle)".format(oracle_apr / 10**16))
+    if price_status == 0:
+        status("ACTION", "Oracle has no usable price; refresh its reference or repair the V4 fallback.")
+    return price_status
 
 
 def _review_auction_floor(strategy_address, selected_price, source, broadcast):
+    section("🔨 Auction floor")
     if not strategy_address:
-        print("Auction check: skipped (set STRATEGY to enable it)")
+        status("SKIP", "Set STRATEGY to enable the auction check.")
         return
 
     # Shared TokenizedStrategy methods and Grove's own methods live at the same
@@ -238,38 +249,38 @@ def _review_auction_floor(strategy_address, selected_price, source, broadcast):
     target_floor = selected_price * (MAX_BPS - AUCTION_FLOOR_DISCOUNT_BPS) // MAX_BPS
     change_bps = _deviation_bps(target_floor, auction_floor)
 
-    print("Auction reference: {} ({})".format(_format_price(selected_price), source))
-    print("Strategy floor:    {}".format(_format_price(strategy_floor, "USDS")))
-    print("Auction floor:     {}".format(_format_price(auction_floor, "USDS")))
-    print("Recommended floor: {} (20% below reference)".format(_format_price(target_floor, "USDS")))
+    field("Live Kyber price", "{} ({:,} GROVE quote)".format(
+        _format_price(selected_price), _kyber_quote_amount() // 10**18
+    ))
+    if strategy_floor == auction_floor:
+        field("Current floor", "{} (strategy and auction agree)".format(_format_price(auction_floor, "USDS")))
+    else:
+        field("Strategy floor", _format_price(strategy_floor, "USDS"))
+        field("Auction floor", _format_price(auction_floor, "USDS"))
+    field("Suggested floor", "{} (20% below live Kyber quote)".format(_format_price(target_floor, "USDS")))
 
     mismatch = strategy_floor != auction_floor
     significant = auction_floor == 0 or change_bps >= AUCTION_UPDATE_THRESHOLD_BPS
     if not mismatch and not significant:
-        print(
-            "Auction check: no significant floor update needed "
-            "({} bps change).".format(change_bps)
-        )
+        status("KEEP", "Floor change is {:.2f}%, below the 10% threshold; no update needed.".format(change_bps / 100))
         return
 
     if mismatch:
-        print("ALERT: strategy and Auction minimum prices disagree.")
+        status("REVIEW", "Strategy and auction floors disagree.")
     if significant:
-        print("ALERT: recommended auction floor differs by {} bps.".format(change_bps))
+        status("REVIEW", "Suggested floor differs by {:.2f}%.".format(change_bps / 100))
 
     if auction.isAnActiveAuction():
-        print(
-            "ALERT: an auction is active; the floor update is deferred until it ends."
-        )
+        status("WAIT", "Auction is active; defer the floor update until it ends.")
         return
 
     if not broadcast:
-        print("Broadcast mode would ask whether to update the auction floor.")
+        status("PREVIEW", "Floor update needs confirmation in BROADCAST mode.")
         return
     if not _interactive_confirm(
         "Update the auction floor to {}?".format(_format_price(target_floor, "USDS"))
     ):
-        print("Auction floor left unchanged.")
+        status("KEEP", "Floor update declined; no change made.")
         return
 
     management = base.management()
@@ -279,60 +290,74 @@ def _review_auction_floor(strategy_address, selected_price, source, broadcast):
         lambda address: address.lower() == management.lower(),
     )
     transaction = strategy.setMinimumAuctionPrice(target_floor, {"from": sender})
-    print("Auction-floor transaction: {}".format(transaction.txid))
+    status("UPDATED", "Auction floor updated.")
+    field("Transaction", transaction.txid)
 
 
 def main():
     oracle_address = address_env("ORACLE", MAINNET_GROVE_APR_ORACLE)
     strategy_address = address_env("STRATEGY", MAINNET_GROVE_STRATEGY)
 
+    broadcast = env_bool("BROADCAST")
+    section("🌿 Grove price refresh | {}".format("BROADCAST" if broadcast else "PREVIEW — no transactions"))
     oracle = _load_oracle(oracle_address)
     validate_mainnet_deployment(Contract, oracle_address, strategy_address)
-    broadcast = env_bool("BROADCAST")
     quote_amount = int(oracle.GROVE_PRICE_QUOTE_AMOUNT())
     stored_price = int(oracle.storedGrovePrice())
     last_update = int(oracle.lastPriceUpdate())
     age = max(0, chain.time() - last_update) if stored_price else 0
 
+    section("💰 Pricing & APR")
     if stored_price:
-        print(
-            "Stored reference: {} ({} seconds old)".format(
-                _format_price(stored_price), age
-            )
-        )
-        if age >= STORED_PRICE_DECAY_START:
-            print("ALERT: stored GROVE reference is at least seven days old.")
-        elif age >= STORED_PRICE_VALIDITY:
-            print("ALERT: stored GROVE price is at least 72 hours old.")
+        field("Stored at start", _format_price(stored_price))
+        field("Age at start", "{} ({:.1f} hours)".format(format_age(age), age / 3600))
+        if age > STORED_PRICE_DECAY_START:
+            status("WARN", "Reference is beyond 7 days; without valid V4 pricing its value decays to zero by day 14.")
+        elif age > STORED_PRICE_VALIDITY:
+            status("WARN", "Reference is stale (>72h); a valid V4 quote now has priority.")
     else:
-        print("Stored reference: not initialized")
+        field("Stored at start", "not initialized")
 
     reference_amount = _kyber_quote_amount()
+    quote_rows, result_lines = [], []
     kyber_price, kyber_source = _refresh_from_kyber(
-        oracle, reference_amount, stored_price, age, broadcast
+        oracle, reference_amount, stored_price, age, broadcast,
+        quote_rows=quote_rows, result_lines=result_lines,
     )
-    _print_kyber_comparison_quotes(reference_amount)
+    _print_kyber_comparison_quotes(reference_amount, quote_rows)
+    if stored_price:
+        signed_move = (kyber_price - stored_price) * 100 / stored_price
+        field("Reference move", "{:+.2f}% vs stored price at start".format(signed_move))
+    price_status = _print_oracle_status(oracle, strategy_address)
 
     route = oracle.quoteUniV4Route()
     amount_allocated = int(route[1])
     live_price = int(route[2])
-    print(
-        "Live V4 route: {:,} / {:,} GROVE allocated".format(
-            amount_allocated // 10**18, quote_amount // 10**18
-        )
-    )
-
+    field("V4 quote coverage", "{:,} / {:,} GROVE ({:.2f}%)".format(
+        amount_allocated // 10**18, quote_amount // 10**18,
+        amount_allocated * 100 / quote_amount if quote_amount else 0,
+    ))
     if amount_allocated == quote_amount and live_price:
-        print("Live V4 price: {}".format(_format_price(live_price)))
-        print(
-            "V4/Kyber divergence: {} bps".format(
-                _deviation_bps(live_price, kyber_price)
-            )
-        )
+        field("V4 price", _format_price(live_price))
+        field("V4 vs Kyber", "{:.2f}% difference".format(_deviation_bps(live_price, kyber_price) / 100))
+        status("OK", "V4 quote covers the full requested amount.")
     else:
-        print("ALERT: live V4 fallback route is incomplete.")
+        status("ACTION", "V4 quote is incomplete, so it cannot be used as the fallback price.")
 
-    _print_oracle_status(oracle, strategy_address)
+    if price_status == 1:
+        status("INFO", "Fresh stored reference has priority for 72h, even if V4 is available.")
+    elif price_status == 2:
+        status("INFO", "Stored reference is stale or unset; using an acceptable live V4 price.")
+    elif price_status == 3:
+        status("WARN", "No acceptable V4 price; using the stale reference at full value through day 7.")
+    elif price_status == 4:
+        status("WARN", "No acceptable V4 price; the stale reference is decaying toward zero at day 14.")
+    print()
+    for level, message in result_lines:
+        status(level, message)
+    field("Age policy", "36h: refresh due | 72h: prefer V4")
+    field("If V4 unavailable", "Day 7: stored price starts decaying | Day 14: zero price / APR")
+
     _review_auction_floor(
         strategy_address, kyber_price, kyber_source, broadcast
     )

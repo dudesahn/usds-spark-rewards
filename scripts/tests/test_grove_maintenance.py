@@ -274,7 +274,7 @@ class MaintenancePolicyTest(unittest.TestCase):
         self.assertTrue(
             any(
                 call.args
-                and "WARNING: strategy" in call.args[0]
+                and "WARN: Strategy" in call.args[0]
                 and "not in the USDS-1 default queue" in call.args[0]
                 for call in output.call_args_list
             )
@@ -404,9 +404,12 @@ class MaintenancePolicyTest(unittest.TestCase):
                     "Kyber executable reference", True,
                 )
                 messages = [call.args[0] for call in output.call_args_list if call.args]
-                self.assertTrue(any("1,000,000 GROVE -> 6,000.000000 USDC (0.00600000 USDC/GROVE)" in message for message in messages))
+                self.assertTrue(any(
+                    message.split() == ["1,000,000", "6,000.000000", "0.00600000", "comparison", "only"]
+                    for message in messages
+                ))
                 if comparison_fails:
-                    self.assertTrue(any("comparison failed for 500,000 GROVE" in message for message in messages))
+                    self.assertTrue(any("Comparison unavailable for 500,000 GROVE" in message for message in messages))
 
     def test_kyber_price_quote_amount_can_be_overridden_in_grove_units(self):
         with patch.dict(
