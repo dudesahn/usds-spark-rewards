@@ -23,6 +23,9 @@ MAINNET_GROVE_STRATEGY = "0xe060B80438771f13078048c3b0d930efECA6E622"
 YEARN_APR_ORACLE = "0x1981AD9F44F2EA9aDd2dC4AD7D075c102C70aF92"
 USDS_1_VAULT = "0x182863131F9a4630fF9E27830d945B1413e347E8"
 DEFAULT_BROWNIE_ACCOUNT = "llc2"
+PRIORITY_FEE_WEI = 10_000_000  # 0.01 gwei
+MAX_BASE_FEE_WEI = 500_000_000  # 0.5 gwei; checked before each broadcast
+BASE_FEE_MULTIPLIER = 3
 
 
 def load_contract(contract_factory, address, required_methods, strategy=False):
@@ -151,6 +154,51 @@ def load_authorized_account(accounts, description, is_authorized):
             )
         )
     return sender
+
+
+def _broadcast_base_fee(chain):
+    """Read the latest base fee; unavailable or expensive gas blocks a send."""
+    try:
+        # Brownie's property fetches the latest block on every access.
+        base_fee = chain.base_fee
+        if isinstance(base_fee, bool) or not isinstance(base_fee, int) or base_fee < 0:
+            raise ValueError("Invalid base fee")
+    except Exception:
+        # RPC errors can contain credentials; do not echo provider exceptions.
+        status("WARN", "Cannot read a valid current base fee; transaction skipped.")
+        return None
+    if base_fee > MAX_BASE_FEE_WEI:
+        status("WARN", "Base fee {:.9f} gwei exceeds the 0.5 gwei broadcast limit; transaction skipped.".format(
+            base_fee / 10**9
+        ))
+        return None
+    return int(base_fee)
+
+
+def broadcast_transaction(chain, method, *args, load_sender):
+    """Use a 0.01 gwei tip and max fee = 3 * latest base fee + tip.
+
+    The 0.5 gwei cutoff applies to the observed base fee, not the max-fee
+    allowance. Check before any account prompt, then again after unlocking or
+    confirmation, immediately before handing the transaction to Brownie.
+    Return None when gas blocks the send or the sender callback declines.
+    """
+    if _broadcast_base_fee(chain) is None:
+        return None
+    sender = load_sender()
+    if sender is None:
+        return None
+    base_fee = _broadcast_base_fee(chain)
+    if base_fee is None:
+        return None
+    max_fee = BASE_FEE_MULTIPLIER * base_fee + PRIORITY_FEE_WEI
+    field("Gas fees (gwei)", "base {:.9f} | tip 0.01 | max {:.9f}".format(
+        base_fee / 10**9, max_fee / 10**9
+    ))
+    status("SEND", "Broadcasting with the selected gas fees.")
+    return method(*args, {
+        "from": sender, "priority_fee": PRIORITY_FEE_WEI, "max_fee": max_fee,
+    })
 
 
 def validate_mainnet_deployment(contract_factory, oracle_address, strategy_address):

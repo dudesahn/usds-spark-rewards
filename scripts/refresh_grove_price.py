@@ -15,6 +15,8 @@ the recommendation differs by at least 10%.
 
 No transaction is sent unless ``BROADCAST=true``. Contract loading leaves
 Brownie's deployment cache unchanged and uses no handwritten ABIs.
+Broadcasts use a 0.01 gwei tip and a max fee of 3 * base fee + tip, and are
+skipped with a warning when the current base fee exceeds 0.5 gwei or is unavailable.
 Set VERBOSE=true to include full deployment addresses.
 
 Examples:
@@ -38,6 +40,7 @@ try:
         MAINNET_GROVE_STRATEGY,
         ZERO_ADDRESS,
         address_env,
+        broadcast_transaction,
         deviation_bps as _deviation_bps,
         env_bool,
         fetch_kyber_route,
@@ -62,6 +65,7 @@ except ModuleNotFoundError as error:
         MAINNET_GROVE_STRATEGY,
         ZERO_ADDRESS,
         address_env,
+        broadcast_transaction,
         deviation_bps as _deviation_bps,
         env_bool,
         fetch_kyber_route,
@@ -199,11 +203,16 @@ def _refresh_from_kyber(
         return quoted_price, "Kyber reference (stored reference unchanged)"
 
     if broadcast:
-        status("SEND", "Store {} from the {:,} GROVE quote: {}.".format(
+        field("Reference update", "Store {} from the {:,} GROVE quote: {}.".format(
             _format_price(quoted_price), quote_amount // 10**18, reason
         ))
-        sender = _load_authorized_account(oracle)
-        transaction = oracle.setGrovePrice(quoted_price, {"from": sender})
+        transaction = broadcast_transaction(
+            chain, oracle.setGrovePrice, quoted_price,
+            load_sender=lambda: _load_authorized_account(oracle),
+        )
+        if transaction is None:
+            result("WAIT", "Stored reference unchanged; price transaction skipped.")
+            return quoted_price, "Kyber reference (broadcast skipped)"
         result("UPDATED", "Stored reference price refreshed ({}).".format(reason))
         field("Transaction", transaction.txid)
     else:
@@ -278,19 +287,25 @@ def _review_auction_floor(strategy_address, selected_price, source, broadcast):
     if not broadcast:
         status("PREVIEW", "Floor update needs confirmation in BROADCAST mode.")
         return
-    if not _interactive_confirm(
-        "Update the auction floor to {}?".format(_format_price(target_floor, "USDS"))
-    ):
-        status("KEEP", "Floor update declined; no change made.")
-        return
 
-    management = base.management()
-    sender = load_authorized_account(
-        accounts,
-        "auction floor update",
-        lambda address: address.lower() == management.lower(),
+    def load_sender():
+        if not _interactive_confirm(
+            "Update the auction floor to {}?".format(_format_price(target_floor, "USDS"))
+        ):
+            status("KEEP", "Floor update declined; no change made.")
+            return None
+        management = base.management()
+        return load_authorized_account(
+            accounts,
+            "auction floor update",
+            lambda address: address.lower() == management.lower(),
+        )
+
+    transaction = broadcast_transaction(
+        chain, strategy.setMinimumAuctionPrice, target_floor, load_sender=load_sender,
     )
-    transaction = strategy.setMinimumAuctionPrice(target_floor, {"from": sender})
+    if transaction is None:
+        return
     status("UPDATED", "Auction floor updated.")
     field("Transaction", transaction.txid)
 

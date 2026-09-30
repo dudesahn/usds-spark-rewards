@@ -11,7 +11,7 @@ if "brownie" not in sys.modules:
     brownie = types.ModuleType("brownie")
     brownie.Contract = object()
     brownie.accounts = object()
-    brownie.chain = types.SimpleNamespace(id=1, height=123, time=lambda: 456)
+    brownie.chain = types.SimpleNamespace(id=1, height=123, time=lambda: 456, base_fee=100_000_000)
     brownie.network = types.ModuleType("brownie.network")
     brownie.network.contract = types.ModuleType("brownie.network.contract")
     brownie.network.contract._add_deployment = Mock()
@@ -241,7 +241,7 @@ class MaintenancePolicyTest(unittest.TestCase):
         ):
             price_script._review_auction_floor(strategy_address, 10**16, "test", True)
 
-        self.assertEqual(strategy.floor_updates, [(8 * 10**15, {"from": sender})])
+        self.assertEqual(strategy.floor_updates, [(8 * 10**15, {"from": sender, "priority_fee": 10_000_000, "max_fee": 310_000_000})])
         self.assertEqual([call.args for call in factory.call_args_list], [
             (strategy_address,), (strategy.auction(),),
         ])
@@ -344,7 +344,7 @@ class MaintenancePolicyTest(unittest.TestCase):
 
         self.assertEqual(selected_price, quoted_price)
         self.assertEqual(source, "Kyber executable reference")
-        self.assertEqual(oracle.price_calls, [(quoted_price, {"from": sender})])
+        self.assertEqual(oracle.price_calls, [(quoted_price, {"from": sender, "priority_fee": 10_000_000, "max_fee": 310_000_000})])
 
     def test_kyber_dry_run_uses_raw_quote_without_transaction(self):
         oracle = FakePriceOracle()
@@ -415,7 +415,7 @@ class MaintenancePolicyTest(unittest.TestCase):
                     self.assertTrue(price_script.main())
 
                 self.assertEqual(amounts, [500_000, 100_000, 1_000_000])
-                self.assertEqual(oracle.price_calls, [(reference_price, {"from": sender})])
+                self.assertEqual(oracle.price_calls, [(reference_price, {"from": sender, "priority_fee": 10_000_000, "max_fee": 310_000_000})])
                 review_floor.assert_called_once_with(
                     price_script.MAINNET_GROVE_STRATEGY, reference_price,
                     "Kyber executable reference", True,

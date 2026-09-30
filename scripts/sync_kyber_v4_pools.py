@@ -8,6 +8,8 @@ generated Solidity deployment snapshot. Brownie supplies the active network,
 contract access, account loading, and transaction handling. Contract loading
 leaves Brownie's deployment cache unchanged and uses no handwritten ABIs.
 Set VERBOSE=true for the full pool table and file paths.
+Broadcasts use a 0.01 gwei tip and a max fee of 3 * base fee + tip. A base fee
+above 0.5 gwei or an unavailable fee skips the transaction and local file writes.
 
 By default the script asks Kyber for its unrestricted best GROVE/USDC routes at
 10,000, 50,000, 100,000, 500,000, and 1,000,000 GROVE. It records any hookless
@@ -44,6 +46,7 @@ try:
         SUPPORTED_QUOTE_TOKENS,
         ZERO_ADDRESS,
         address_env,
+        broadcast_transaction,
         env_bool,
         fetch_kyber_route,
         load_authorized_account,
@@ -77,6 +80,7 @@ except ModuleNotFoundError as error:
         SUPPORTED_QUOTE_TOKENS,
         ZERO_ADDRESS,
         address_env,
+        broadcast_transaction,
         env_bool,
         fetch_kyber_route,
         load_authorized_account,
@@ -421,6 +425,7 @@ def sync_pools(
             ))
 
     onchain_update_needed = configured_pools != selected_pools
+    broadcast_skipped = False
     if onchain_update_needed:
         # eth_call validates the setter and pool configs without modifying state
         # or unlocking an account, including in preview/registry-only mode.
@@ -433,22 +438,29 @@ def sync_pools(
         onchain_result = "PREVIEW — pool changes available; use BROADCAST=true to apply"
     else:
         management = oracle.management()
-        sender = load_authorized_account(
-            accounts,
-            "oracle pool update",
-            lambda address: address.lower() == management.lower()
-            or oracle.poolSetters(address),
+        transaction = broadcast_transaction(
+            chain, oracle.setUniV4Pools, selected_pools,
+            load_sender=lambda: load_authorized_account(
+                accounts,
+                "oracle pool update",
+                lambda address: address.lower() == management.lower()
+                or oracle.poolSetters(address),
+            ),
         )
-        status("SEND", "Updating the oracle pool list from {}.".format(sender.address))
-        transaction = oracle.setUniV4Pools(selected_pools, {"from": sender})
-        field("Transaction", transaction.txid)
+        if transaction is None:
+            broadcast_skipped = True
+            onchain_result = "SKIPPED — gas policy blocked the pool transaction"
+        else:
+            field("Transaction", transaction.txid)
+            updated = _configured_pools(oracle)
+            if updated != selected_pools:
+                raise RuntimeError("Pool sync did not produce the requested configuration")
+            onchain_result = "UPDATED — pool selection confirmed onchain"
 
-        updated = _configured_pools(oracle)
-        if updated != selected_pools:
-            raise RuntimeError("Pool sync did not produce the requested configuration")
-        onchain_result = "UPDATED — pool selection confirmed onchain"
-
-    if apply_registry or broadcast:
+    if broadcast_skipped:
+        registry_result = "NOT WRITTEN — pool transaction skipped"
+        generated_result = "NOT WRITTEN — pool transaction skipped"
+    elif apply_registry or broadcast:
         registry_updated = write_registry(registry)
         generated_updated = write_generated_config(registry)
         registry_result = "UPDATED" if registry_updated else "UNCHANGED"

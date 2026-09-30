@@ -176,7 +176,9 @@ class ContributionPolicyTest(unittest.TestCase):
 
         self.write_registry.side_effect = save
         selected = sync_script.sync_pools(self.oracle, [self.route], broadcast=True)
-        self.oracle.setUniV4Pools.assert_called_once_with(selected, {"from": self.sender})
+        self.oracle.setUniV4Pools.assert_called_once_with(
+            selected, {"from": self.sender, "priority_fee": 10_000_000, "max_fee": 310_000_000}
+        )
         self.write_registry.assert_called_once()
         self.write_generated_config.assert_called_once_with(self.write_registry.call_args.args[0])
 
