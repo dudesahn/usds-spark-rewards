@@ -21,39 +21,76 @@ interface IV4Quoter {
         bytes hookData;
     }
 
-    function quoteExactInputSingle(QuoteExactSingleParams memory params)
-        external
-        returns (uint256 amountOut, uint256 gasEstimate);
+    function quoteExactInputSingle(
+        QuoteExactSingleParams memory params
+    ) external returns (uint256 amountOut, uint256 gasEstimate);
 }
 
 interface IV4PositionManagerView {
-    function poolKeys(bytes25 poolId)
+    function poolKeys(
+        bytes25 poolId
+    )
         external
         view
-        returns (address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks);
+        returns (
+            address currency0,
+            address currency1,
+            uint24 fee,
+            int24 tickSpacing,
+            address hooks
+        );
 }
 
 contract V4SimulatorHarness {
-    function loadSwapFee(IUniswapV4StateView stateView, bytes32 poolId)
-        external
-        view
-        returns (uint24 swapFee, bool initialized)
-    {
-        (, swapFee, initialized) = UniswapV4SwapSimulator.loadState(stateView, poolId, false);
+    function loadSwapFee(
+        IUniswapV4StateView stateView,
+        bytes32 poolId
+    ) external view returns (uint24 swapFee, bool initialized) {
+        (, swapFee, initialized) = UniswapV4SwapSimulator.loadState(
+            stateView,
+            poolId,
+            false
+        );
     }
 
-    function quote(IUniswapV4StateView stateView, bytes32 poolId, int24 tickSpacing, uint256 amountIn)
+    function quote(
+        IUniswapV4StateView stateView,
+        bytes32 poolId,
+        int24 tickSpacing,
+        uint256 amountIn
+    )
         external
         view
-        returns (uint256 amountConsumed, uint256 amountOut, bool valid, bool fullyFilled)
+        returns (
+            uint256 amountConsumed,
+            uint256 amountOut,
+            bool valid,
+            bool fullyFilled
+        )
     {
-        (UniswapV4SwapSimulator.State memory state, uint24 swapFee, bool initialized) =
-            UniswapV4SwapSimulator.loadState(stateView, poolId, false);
+        (
+            UniswapV4SwapSimulator.State memory state,
+            uint24 swapFee,
+            bool initialized
+        ) = UniswapV4SwapSimulator.loadState(stateView, poolId, false);
         if (!initialized) return (0, 0, false, false);
 
-        UniswapV4SwapSimulator.Preview memory preview =
-            UniswapV4SwapSimulator.previewExactInput(stateView, poolId, tickSpacing, false, amountIn, swapFee, state);
-        return (preview.amountIn, preview.amountOut, preview.valid, preview.fullyFilled);
+        UniswapV4SwapSimulator.Preview memory preview = UniswapV4SwapSimulator
+            .previewExactInput(
+                stateView,
+                poolId,
+                tickSpacing,
+                false,
+                amountIn,
+                swapFee,
+                state
+            );
+        return (
+            preview.amountIn,
+            preview.amountOut,
+            preview.valid,
+            preview.fullyFilled
+        );
     }
 
     function quoteWithDirection(
@@ -62,15 +99,39 @@ contract V4SimulatorHarness {
         int24 tickSpacing,
         bool zeroForOne,
         uint256 amountIn
-    ) external view returns (uint256 amountConsumed, uint256 amountOut, bool valid, bool fullyFilled) {
-        (UniswapV4SwapSimulator.State memory state, uint24 swapFee, bool initialized) =
-            UniswapV4SwapSimulator.loadState(stateView, poolId, zeroForOne);
+    )
+        external
+        view
+        returns (
+            uint256 amountConsumed,
+            uint256 amountOut,
+            bool valid,
+            bool fullyFilled
+        )
+    {
+        (
+            UniswapV4SwapSimulator.State memory state,
+            uint24 swapFee,
+            bool initialized
+        ) = UniswapV4SwapSimulator.loadState(stateView, poolId, zeroForOne);
         if (!initialized) return (0, 0, false, false);
 
-        UniswapV4SwapSimulator.Preview memory preview = UniswapV4SwapSimulator.previewExactInput(
-            stateView, poolId, tickSpacing, zeroForOne, amountIn, swapFee, state
+        UniswapV4SwapSimulator.Preview memory preview = UniswapV4SwapSimulator
+            .previewExactInput(
+                stateView,
+                poolId,
+                tickSpacing,
+                zeroForOne,
+                amountIn,
+                swapFee,
+                state
+            );
+        return (
+            preview.amountIn,
+            preview.amountOut,
+            preview.valid,
+            preview.fullyFilled
         );
-        return (preview.amountIn, preview.amountOut, preview.valid, preview.fullyFilled);
     }
 }
 
@@ -80,29 +141,38 @@ contract GroveOracleTest is Test {
     GroveCompounderAprOracle public oracle;
     V4SimulatorHarness public simulator;
 
-    uint256 internal constant ORACLE_FORK_BLOCK = 25_668_920;
+    IUniswapV4StateView internal constant STATE_VIEW =
+        IUniswapV4StateView(0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227);
+    IV4Quoter internal constant V4_QUOTER =
+        IV4Quoter(0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203);
 
-    IUniswapV4StateView internal constant STATE_VIEW = IUniswapV4StateView(0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227);
-    IV4Quoter internal constant V4_QUOTER = IV4Quoter(0x52F0E24D1c21C8A0cB1e5a5dD6198556BD9E1203);
+    bytes32 internal constant POOL_ONE =
+        0x2897b6ccd757711791a90b723df4f89567568859d040ff97d25cc4a5cb93ea03;
+    bytes32 internal constant POOL_TWO =
+        0x9fe7fb249f5fdacc3c102cb8f9c5e5b59b70da2ea96377804bcb58328b93441f;
+    bytes32 internal constant POOL_THREE =
+        0xb557b2447a4723741959fe7ebd5a37375023931d19f6383cc83bd0d9c8397bb9;
+    bytes32 internal constant POOL_FOUR =
+        0x2e53ef1a957f41bfba562bac317881d6f0ef2d6c217c7279c11b0878f9791ad5;
+    bytes32 internal constant POOL_FIVE =
+        0xaa0b1a90c6188f42c3603998536418f4eeedccf20b999377dab7e4c6aafc5286;
+    bytes32 internal constant POOL_VOLUME =
+        0x20d117a32203158c46d0dce34ade2b2cbf846d151e9cea406e0463fe361d82ce;
+    bytes32 internal constant POOL_KYBER =
+        0x0d40eef4d9600a37016f34d089705e83d8d9e40ac80838abb04a278fa049e874;
+    bytes32 internal constant POOL_KYBER_TWO =
+        0x31c6aeb8a664ed9ef2ec68791e7043e1aee1481ab4507b227b179072c9e4871b;
+    bytes32 internal constant POOL_KYBER_USDT =
+        0xde47849dd91a1d9b90a775776ae012cfc6eb2eb2ce0fe7c5be770038dd71ae4e;
 
-    bytes32 internal constant POOL_ONE = 0x2897b6ccd757711791a90b723df4f89567568859d040ff97d25cc4a5cb93ea03;
-    bytes32 internal constant POOL_TWO = 0x9fe7fb249f5fdacc3c102cb8f9c5e5b59b70da2ea96377804bcb58328b93441f;
-    bytes32 internal constant POOL_THREE = 0xb557b2447a4723741959fe7ebd5a37375023931d19f6383cc83bd0d9c8397bb9;
-    bytes32 internal constant POOL_FOUR = 0x2e53ef1a957f41bfba562bac317881d6f0ef2d6c217c7279c11b0878f9791ad5;
-    bytes32 internal constant POOL_FIVE = 0xaa0b1a90c6188f42c3603998536418f4eeedccf20b999377dab7e4c6aafc5286;
-    bytes32 internal constant POOL_VOLUME = 0x20d117a32203158c46d0dce34ade2b2cbf846d151e9cea406e0463fe361d82ce;
-    bytes32 internal constant POOL_KYBER = 0x0d40eef4d9600a37016f34d089705e83d8d9e40ac80838abb04a278fa049e874;
-    bytes32 internal constant POOL_KYBER_TWO = 0x31c6aeb8a664ed9ef2ec68791e7043e1aee1481ab4507b227b179072c9e4871b;
-    bytes32 internal constant POOL_KYBER_USDT = 0xde47849dd91a1d9b90a775776ae012cfc6eb2eb2ce0fe7c5be770038dd71ae4e;
-
-    address internal constant GROVE = 0xB30FE1Cf884B48a22a50D22a9282004F2c5E9406;
+    address internal constant GROVE =
+        0xB30FE1Cf884B48a22a50D22a9282004F2c5E9406;
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address internal constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
 
     address internal user = address(0xBEEF);
 
     function setUp() public {
-        vm.rollFork(ORACLE_FORK_BLOCK);
         oracle = new GroveCompounderAprOracle();
         oracle.setUniV4Pools(_initialOraclePools());
         simulator = new V4SimulatorHarness();
@@ -121,34 +191,50 @@ contract GroveOracleTest is Test {
         assertEq(oracle.GROVE_PRICE_CHUNK_AMOUNT(), 1_000e18);
         assertEq(oracle.MAX_V4_POOLS(), 10);
 
-        (bytes32 poolId, uint24 fee, int24 tickSpacing, address quoteToken, bool zeroForOne) = oracle.uniV4Pool(0);
+        (
+            bytes32 poolId,
+            uint24 fee,
+            int24 tickSpacing,
+            address quoteToken,
+            bool zeroForOne
+        ) = oracle.uniV4Pool(0);
         assertEq(poolId, POOL_FIVE);
         assertEq(fee, 49_900);
         assertEq(tickSpacing, 998);
         assertEq(quoteToken, USDC);
         assertFalse(zeroForOne);
 
-        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(1);
+        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(
+            1
+        );
         assertEq(poolId, POOL_ONE);
         assertEq(fee, 10_000);
         assertEq(tickSpacing, 200);
 
-        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(2);
+        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(
+            2
+        );
         assertEq(poolId, POOL_TWO);
         assertEq(fee, 49_800);
         assertEq(tickSpacing, 996);
 
-        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(3);
+        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(
+            3
+        );
         assertEq(poolId, POOL_VOLUME);
         assertEq(fee, 49_898);
         assertEq(tickSpacing, 499);
 
-        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(4);
+        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(
+            4
+        );
         assertEq(poolId, POOL_KYBER);
         assertEq(fee, 86_400);
         assertEq(tickSpacing, 10);
 
-        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(5);
+        (poolId, fee, tickSpacing, quoteToken, zeroForOne) = oracle.uniV4Pool(
+            5
+        );
         assertEq(poolId, POOL_KYBER_TWO);
         assertEq(fee, 101_300);
         assertEq(tickSpacing, 10);
@@ -160,15 +246,17 @@ contract GroveOracleTest is Test {
         poolIds[1] = POOL_VOLUME;
 
         vm.prank(user);
-        vm.expectRevert(GroveCompounderAprOracle.UnauthorizedPoolSetter.selector);
+        vm.expectRevert(
+            GroveCompounderAprOracle.UnauthorizedPoolSetter.selector
+        );
         oracle.setUniV4Pools(poolIds);
 
         oracle.setUniV4Pools(poolIds);
         assertEq(oracle.uniV4PoolCount(), 2);
 
-        (bytes32 poolId,,,,) = oracle.uniV4Pool(0);
+        (bytes32 poolId, , , , ) = oracle.uniV4Pool(0);
         assertEq(poolId, POOL_TWO);
-        (poolId,,,,) = oracle.uniV4Pool(1);
+        (poolId, , , , ) = oracle.uniV4Pool(1);
         assertEq(poolId, POOL_VOLUME);
 
         poolIds[1] = POOL_TWO;
@@ -180,7 +268,9 @@ contract GroveOracleTest is Test {
         assertFalse(oracle.poolSetters(user));
 
         vm.prank(user);
-        vm.expectRevert(GroveCompounderAprOracle.UnauthorizedManagement.selector);
+        vm.expectRevert(
+            GroveCompounderAprOracle.UnauthorizedManagement.selector
+        );
         oracle.setPoolSetter(user, true);
 
         vm.expectRevert(GroveCompounderAprOracle.InvalidPoolSetter.selector);
@@ -201,7 +291,9 @@ contract GroveOracleTest is Test {
         assertFalse(oracle.poolSetters(user));
 
         vm.prank(user);
-        vm.expectRevert(GroveCompounderAprOracle.UnauthorizedPoolSetter.selector);
+        vm.expectRevert(
+            GroveCompounderAprOracle.UnauthorizedPoolSetter.selector
+        );
         oracle.setUniV4Pools(poolIds);
     }
 
@@ -209,7 +301,9 @@ contract GroveOracleTest is Test {
         assertFalse(oracle.priceSetters(user));
 
         vm.prank(user);
-        vm.expectRevert(GroveCompounderAprOracle.UnauthorizedManagement.selector);
+        vm.expectRevert(
+            GroveCompounderAprOracle.UnauthorizedManagement.selector
+        );
         oracle.setPriceSetter(user, true);
 
         vm.expectRevert(GroveCompounderAprOracle.InvalidPriceSetter.selector);
@@ -226,7 +320,9 @@ contract GroveOracleTest is Test {
         assertFalse(oracle.priceSetters(user));
 
         vm.prank(user);
-        vm.expectRevert(GroveCompounderAprOracle.UnauthorizedPriceSetter.selector);
+        vm.expectRevert(
+            GroveCompounderAprOracle.UnauthorizedPriceSetter.selector
+        );
         oracle.setGrovePrice(1e18);
     }
 
@@ -274,7 +370,10 @@ contract GroveOracleTest is Test {
         _mockPoolKey(POOL_ONE, USDC, GROVE, 10_000, 200, address(0));
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getSlot0.selector, POOL_ONE),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getSlot0.selector,
+                POOL_ONE
+            ),
             abi.encode(uint160(0), int24(0), uint24(0), uint24(10_000))
         );
 
@@ -290,7 +389,8 @@ contract GroveOracleTest is Test {
         (
             uint256 totalAmountOut,
             uint256 amountAllocated,
-            uint256 price,,
+            uint256 price,
+            ,
             uint256[] memory allocations,
             uint256[] memory outputs
         ) = oracle.quoteUniV4Route();
@@ -309,7 +409,8 @@ contract GroveOracleTest is Test {
         _mockIdenticalPool(POOL_TWO);
         _mockIdenticalPool(POOL_THREE);
 
-        (,, uint256 price,, uint256[] memory allocations,) = oracle.quoteUniV4Route();
+        (, , uint256 price, , uint256[] memory allocations, ) = oracle
+            .quoteUniV4Route();
 
         assertGt(price, 0);
         assertEq(allocations[0], 4_000e18);
@@ -341,7 +442,8 @@ contract GroveOracleTest is Test {
         oracle.setUniV4Pools(poolIds);
 
         uint256 gasBefore = gasleft();
-        (, uint256 amountAllocated, uint256 price,,,) = oracle.quoteUniV4Route();
+        (, uint256 amountAllocated, uint256 price, , , ) = oracle
+            .quoteUniV4Route();
         uint256 gasUsed = gasBefore - gasleft();
 
         assertEq(amountAllocated, oracle.GROVE_PRICE_QUOTE_AMOUNT());
@@ -355,14 +457,25 @@ contract GroveOracleTest is Test {
         _mockPoolWithProtocolFee(POOL_THREE, packedProtocolFee, lpFee);
         _mockPool(POOL_FOUR, uint160(1 << 96), 0, 1e24, lpFee);
 
-        (uint24 swapFee, bool initialized) = simulator.loadSwapFee(STATE_VIEW, POOL_THREE);
+        (uint24 swapFee, bool initialized) = simulator.loadSwapFee(
+            STATE_VIEW,
+            POOL_THREE
+        );
         assertTrue(initialized);
         assertEq(swapFee, 10_495);
 
-        (uint256 consumedWithFee, uint256 outputWithFee, bool validWithFee, bool filledWithFee) =
-            simulator.quote(STATE_VIEW, POOL_THREE, 10, 1_000e18);
-        (uint256 consumedWithoutFee, uint256 outputWithoutFee, bool validWithoutFee, bool filledWithoutFee) =
-            simulator.quote(STATE_VIEW, POOL_FOUR, 10, 1_000e18);
+        (
+            uint256 consumedWithFee,
+            uint256 outputWithFee,
+            bool validWithFee,
+            bool filledWithFee
+        ) = simulator.quote(STATE_VIEW, POOL_THREE, 10, 1_000e18);
+        (
+            uint256 consumedWithoutFee,
+            uint256 outputWithoutFee,
+            bool validWithoutFee,
+            bool filledWithoutFee
+        ) = simulator.quote(STATE_VIEW, POOL_FOUR, 10, 1_000e18);
 
         assertTrue(validWithFee && filledWithFee);
         assertTrue(validWithoutFee && filledWithoutFee);
@@ -379,7 +492,8 @@ contract GroveOracleTest is Test {
         (
             uint256 totalAmountOut,
             uint256 amountAllocated,
-            uint256 price,,
+            uint256 price,
+            ,
             uint256[] memory allocations,
             uint256[] memory outputs
         ) = oracle.quoteUniV4Route();
@@ -399,9 +513,15 @@ contract GroveOracleTest is Test {
         _setPoolCount(3);
         _mockIdenticalPool(POOL_ONE);
         _mockIdenticalPool(POOL_TWO);
-        _mockPool(POOL_THREE, uint160((uint256(1 << 96) * 120) / 100), 0, 1e24, 10_000);
+        _mockPool(
+            POOL_THREE,
+            uint160((uint256(1 << 96) * 120) / 100),
+            0,
+            1e24,
+            10_000
+        );
 
-        (,,,, uint256[] memory allocations,) = oracle.quoteUniV4Route();
+        (, , , , uint256[] memory allocations, ) = oracle.quoteUniV4Route();
 
         assertEq(allocations[0], 5_000e18);
         assertEq(allocations[1], 5_000e18);
@@ -411,19 +531,29 @@ contract GroveOracleTest is Test {
     function test_twoDivergentPoolsAreNotBothRejected() public {
         _setPoolCount(2);
         _mockIdenticalPool(POOL_ONE);
-        _mockPool(POOL_TWO, uint160((uint256(1 << 96) * 120) / 100), 0, 1e24, 10_000);
+        _mockPool(
+            POOL_TWO,
+            uint160((uint256(1 << 96) * 120) / 100),
+            0,
+            1e24,
+            10_000
+        );
 
-        (, uint256 amountAllocated, uint256 price,,,) = oracle.quoteUniV4Route();
+        (, uint256 amountAllocated, uint256 price, , , ) = oracle
+            .quoteUniV4Route();
 
         assertEq(amountAllocated, 10_000e18);
         assertGt(price, 0);
     }
 
-    function test_incompleteRouteReturnsNoPriceAndZeroAprWithoutStoredPrice() public {
+    function test_incompleteRouteReturnsNoPriceAndZeroAprWithoutStoredPrice()
+        public
+    {
         _setPoolCount(1);
         _mockIncompletePool(POOL_ONE);
 
-        (, uint256 amountAllocated, uint256 price,,,) = oracle.quoteUniV4Route();
+        (, uint256 amountAllocated, uint256 price, , , ) = oracle
+            .quoteUniV4Route();
         assertEq(amountAllocated, 0);
         assertEq(price, 0);
 
@@ -433,7 +563,10 @@ contract GroveOracleTest is Test {
         GroveCompounderAprOracle.GrovePriceStatus status;
         (selectedPrice, status) = oracle.grovePriceWithStatus();
         assertEq(selectedPrice, 0);
-        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.Unavailable));
+        assertEq(
+            uint256(status),
+            uint256(GroveCompounderAprOracle.GrovePriceStatus.Unavailable)
+        );
 
         _mockActiveRewards();
         assertEq(oracle.aprAfterDebtChange(address(0), 0), 0);
@@ -441,7 +574,9 @@ contract GroveOracleTest is Test {
 
     function test_onlyPriceSetterCanSetStoredPrice() public {
         vm.prank(user);
-        vm.expectRevert(GroveCompounderAprOracle.UnauthorizedPriceSetter.selector);
+        vm.expectRevert(
+            GroveCompounderAprOracle.UnauthorizedPriceSetter.selector
+        );
         oracle.setGrovePrice(1e18);
 
         vm.expectRevert(GroveCompounderAprOracle.InvalidGrovePrice.selector);
@@ -458,8 +593,12 @@ contract GroveOracleTest is Test {
         assertEq(oracle.lastPriceUpdate(), block.timestamp);
         assertEq(selectedPrice, referencePrice);
         assertFalse(usingLivePrice);
-        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
-        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.FreshStoredPrice));
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle
+            .grovePriceWithStatus();
+        assertEq(
+            uint256(status),
+            uint256(GroveCompounderAprOracle.GrovePriceStatus.FreshStoredPrice)
+        );
     }
 
     function test_freshStoredReferenceWinsThrough72Hours() public {
@@ -483,16 +622,23 @@ contract GroveOracleTest is Test {
         (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
         assertEq(selectedPrice, livePrice);
         assertTrue(usingLivePrice);
-        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
-        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.LiveV4));
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle
+            .grovePriceWithStatus();
+        assertEq(
+            uint256(status),
+            uint256(GroveCompounderAprOracle.GrovePriceStatus.LiveV4)
+        );
     }
 
     function test_outOfBoundsV4UsesStoredFallback() public {
         uint256 referencePrice = _setMockedSinglePoolPrice(10_000);
         oracle.setGrovePrice(referencePrice);
         _mockPool(POOL_ONE, uint160(uint256(1 << 96) * 2), 0, 1e24, 10_000);
-        (,, uint256 livePrice,,,) = oracle.quoteUniV4Route();
-        assertGt(_deviationBps(livePrice, referencePrice), oracle.MAX_LIVE_PRICE_DEVIATION_BPS());
+        (, , uint256 livePrice, , , ) = oracle.quoteUniV4Route();
+        assertGt(
+            _deviationBps(livePrice, referencePrice),
+            oracle.MAX_LIVE_PRICE_DEVIATION_BPS()
+        );
 
         vm.warp(block.timestamp + oracle.STORED_PRICE_VALIDITY() + 1);
 
@@ -511,8 +657,12 @@ contract GroveOracleTest is Test {
         (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
         assertEq(selectedPrice, referencePrice);
         assertFalse(usingLivePrice);
-        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
-        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.StaleStoredPrice));
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle
+            .grovePriceWithStatus();
+        assertEq(
+            uint256(status),
+            uint256(GroveCompounderAprOracle.GrovePriceStatus.StaleStoredPrice)
+        );
     }
 
     function test_storedPriceDecaysLinearlyFromDaySevenToDayFourteen() public {
@@ -525,8 +675,14 @@ contract GroveOracleTest is Test {
         (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
         assertEq(selectedPrice, referencePrice / 2);
         assertFalse(usingLivePrice);
-        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
-        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.DecayingStoredPrice));
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle
+            .grovePriceWithStatus();
+        assertEq(
+            uint256(status),
+            uint256(
+                GroveCompounderAprOracle.GrovePriceStatus.DecayingStoredPrice
+            )
+        );
     }
 
     function test_storedPriceIsZeroAtDayFourteenWithoutV4() public {
@@ -538,8 +694,12 @@ contract GroveOracleTest is Test {
         (uint256 selectedPrice, bool usingLivePrice) = oracle.grovePrice();
         assertEq(selectedPrice, 0);
         assertFalse(usingLivePrice);
-        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle.grovePriceWithStatus();
-        assertEq(uint256(status), uint256(GroveCompounderAprOracle.GrovePriceStatus.Unavailable));
+        (, GroveCompounderAprOracle.GrovePriceStatus status) = oracle
+            .grovePriceWithStatus();
+        assertEq(
+            uint256(status),
+            uint256(GroveCompounderAprOracle.GrovePriceStatus.Unavailable)
+        );
 
         _mockActiveRewards();
         assertEq(oracle.aprAfterDebtChange(address(0), 0), 0);
@@ -561,12 +721,17 @@ contract GroveOracleTest is Test {
         _mockIdenticalPool(POOL_TWO);
         _mockActiveRewards();
 
-        (,, uint256 price,,,) = oracle.quoteUniV4Route();
+        (, , uint256 price, , , ) = oracle.quoteUniV4Route();
         oracle.setGrovePrice(price);
         uint256 expectedApr = (1e18 * 31_536_000 * price) / 1e50;
 
-        (bool success, bytes memory data) = address(oracle)
-            .staticcall(abi.encodeWithSelector(oracle.aprAfterDebtChange.selector, address(0), int256(0)));
+        (bool success, bytes memory data) = address(oracle).staticcall(
+            abi.encodeWithSelector(
+                oracle.aprAfterDebtChange.selector,
+                address(0),
+                int256(0)
+            )
+        );
         assertTrue(success);
         assertEq(abi.decode(data, (uint256)), expectedApr);
     }
@@ -576,14 +741,17 @@ contract GroveOracleTest is Test {
         _mockIdenticalPool(POOL_ONE);
         _mockIdenticalPool(POOL_TWO);
         _mockActiveRewards();
-        (,, uint256 price,,,) = oracle.quoteUniV4Route();
+        (, , uint256 price, , , ) = oracle.quoteUniV4Route();
         oracle.setGrovePrice(price);
 
         address strategy = address(0x1234);
         AprOracle registry = new AprOracle(address(this));
         registry.setOracle(strategy, address(oracle));
 
-        assertEq(registry.getStrategyApr(strategy, 0), oracle.aprAfterDebtChange(strategy, 0));
+        assertEq(
+            registry.getStrategyApr(strategy, 0),
+            oracle.aprAfterDebtChange(strategy, 0)
+        );
     }
 
     function test_aprRespondsToDebtChanges() public {
@@ -591,7 +759,7 @@ contract GroveOracleTest is Test {
         _mockIdenticalPool(POOL_ONE);
         _mockIdenticalPool(POOL_TWO);
         _mockActiveRewards();
-        (,, uint256 price,,,) = oracle.quoteUniV4Route();
+        (, , uint256 price, , , ) = oracle.quoteUniV4Route();
         oracle.setGrovePrice(price);
 
         uint256 currentApr = oracle.aprAfterDebtChange(address(0), 0);
@@ -607,9 +775,13 @@ contract GroveOracleTest is Test {
         _mockIdenticalPool(POOL_ONE);
         _mockIdenticalPool(POOL_TWO);
         _mockActiveRewards();
-        (,, uint256 price,,,) = oracle.quoteUniV4Route();
+        (, , uint256 price, , , ) = oracle.quoteUniV4Route();
         oracle.setGrovePrice(price);
-        vm.mockCall(oracle.STAKING(), abi.encodeWithSelector(IStaking.totalSupply.selector), abi.encode(uint256(1e18)));
+        vm.mockCall(
+            oracle.STAKING(),
+            abi.encodeWithSelector(IStaking.totalSupply.selector),
+            abi.encode(uint256(1e18))
+        );
 
         vm.expectRevert(GroveCompounderAprOracle.AprTooHigh.selector);
         oracle.aprAfterDebtChange(address(0), 0);
@@ -617,7 +789,9 @@ contract GroveOracleTest is Test {
 
     function test_aprReturnsZeroAtPeriodFinish() public {
         vm.mockCall(
-            oracle.STAKING(), abi.encodeWithSelector(IStaking.periodFinish.selector), abi.encode(block.timestamp)
+            oracle.STAKING(),
+            abi.encodeWithSelector(IStaking.periodFinish.selector),
+            abi.encode(block.timestamp)
         );
 
         assertEq(oracle.aprAfterDebtChange(address(0), 0), 0);
@@ -628,13 +802,28 @@ contract GroveOracleTest is Test {
     }
 
     function test_currentKyberPoolMatchesOfficialV4Quoter() public {
-        _assertSimulatorMatchesOfficialV4Quoter(POOL_KYBER_TWO, USDC, GROVE, 101_300, 10, false, 1_000e18);
+        _assertSimulatorMatchesOfficialV4Quoter(
+            POOL_KYBER_TWO,
+            USDC,
+            GROVE,
+            101_300,
+            10,
+            false,
+            1_000e18
+        );
     }
 
     function test_currentUsdtPoolMatchesOfficialV4Quoter() public {
-        vm.rollFork(25_761_300);
         simulator = new V4SimulatorHarness();
-        _assertSimulatorMatchesOfficialV4Quoter(POOL_KYBER_USDT, GROVE, USDT, 8_000, 80, true, 10_000e18);
+        _assertSimulatorMatchesOfficialV4Quoter(
+            POOL_KYBER_USDT,
+            GROVE,
+            USDT,
+            8_000,
+            80,
+            true,
+            10_000e18
+        );
     }
 
     function test_simulatorFindsLiquidityBeyondAnEmptyCurrentRange() public {
@@ -642,27 +831,45 @@ contract GroveOracleTest is Test {
         int128 nextRangeLiquidityDelta = 1e24;
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getSlot0.selector, POOL_ONE),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getSlot0.selector,
+                POOL_ONE
+            ),
             abi.encode(uint160(1 << 96), int24(0), uint24(0), uint24(10_000))
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getLiquidity.selector, POOL_ONE),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getLiquidity.selector,
+                POOL_ONE
+            ),
             abi.encode(uint128(0))
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickBitmap.selector, POOL_ONE, int16(0)),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickBitmap.selector,
+                POOL_ONE,
+                int16(0)
+            ),
             abi.encode(uint256(1 << 1))
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickLiquidity.selector, POOL_ONE, int24(200)),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickLiquidity.selector,
+                POOL_ONE,
+                int24(200)
+            ),
             abi.encode(nextRangeLiquidity, nextRangeLiquidityDelta)
         );
 
-        (uint256 amountConsumed, uint256 amountOut, bool valid, bool fullyFilled) =
-            simulator.quote(STATE_VIEW, POOL_ONE, 200, 1_000e18);
+        (
+            uint256 amountConsumed,
+            uint256 amountOut,
+            bool valid,
+            bool fullyFilled
+        ) = simulator.quote(STATE_VIEW, POOL_ONE, 200, 1_000e18);
 
         assertTrue(valid);
         assertTrue(fullyFilled);
@@ -673,8 +880,12 @@ contract GroveOracleTest is Test {
     function test_simulatorFinalizesFillOnLastPermittedStep() public {
         _mockLiquidityAtWord(POOL_THREE, 126, 1e24);
 
-        (uint256 amountConsumed, uint256 amountOut, bool valid, bool fullyFilled) =
-            simulator.quote(STATE_VIEW, POOL_THREE, 1, 1e18);
+        (
+            uint256 amountConsumed,
+            uint256 amountOut,
+            bool valid,
+            bool fullyFilled
+        ) = simulator.quote(STATE_VIEW, POOL_THREE, 1, 1e18);
 
         assertTrue(valid);
         assertTrue(fullyFilled);
@@ -685,8 +896,12 @@ contract GroveOracleTest is Test {
     function test_simulatorFinalizesPartialQuoteAtStepLimit() public {
         _mockLiquidityAtWord(POOL_THREE, 127, 1e24);
 
-        (uint256 amountConsumed, uint256 amountOut, bool valid, bool fullyFilled) =
-            simulator.quote(STATE_VIEW, POOL_THREE, 1, 1e18);
+        (
+            uint256 amountConsumed,
+            uint256 amountOut,
+            bool valid,
+            bool fullyFilled
+        ) = simulator.quote(STATE_VIEW, POOL_THREE, 1, 1e18);
 
         assertTrue(valid);
         assertFalse(fullyFilled);
@@ -694,7 +909,23 @@ contract GroveOracleTest is Test {
         assertEq(amountOut, 0);
     }
 
-    function test_forkRouteFillsQuote() public {
+    function test_forkRouteAccountsForCurrentLiquidity() public {
+        _assertCurrentRoute(oracle);
+    }
+
+    function test_currentDeploymentPoolsAccountForCurrentLiquidity() public {
+        GroveCompounderAprOracle currentOracle = new GroveCompounderAprOracle();
+        bytes32[] memory poolIds = GroveUniV4PoolConfig.initialPools();
+        currentOracle.setUniV4Pools(poolIds);
+        assertEq(currentOracle.uniV4PoolCount(), poolIds.length);
+        for (uint256 i; i < poolIds.length; ++i) {
+            (bytes32 configuredPool, , , , ) = currentOracle.uniV4Pool(i);
+            assertEq(configuredPool, poolIds[i]);
+        }
+        _assertCurrentRoute(currentOracle);
+    }
+
+    function _assertCurrentRoute(GroveCompounderAprOracle target) internal {
         (
             uint256 totalAmountOut,
             uint256 amountAllocated,
@@ -702,47 +933,92 @@ contract GroveOracleTest is Test {
             bytes32[] memory poolIds,
             uint256[] memory allocations,
             uint256[] memory outputs
-        ) = oracle.quoteUniV4Route();
+        ) = target.quoteUniV4Route();
 
-        console2.log("V4 route USDC out", totalAmountOut);
-        console2.log("V4 GROVE price", price);
-        assertEq(amountAllocated, 10_000e18);
-        assertGt(totalAmountOut, 0);
-        assertGt(price, 0);
-        assertEq(poolIds.length, 6);
-        assertEq(allocations.length, 6);
-        assertEq(outputs.length, 6);
+        uint256 requested = target.GROVE_PRICE_QUOTE_AMOUNT();
+        console2.log("Current fork block", block.number);
+        console2.log("V4 GROVE allocated", amountAllocated);
+        console2.log("V4 GROVE requested", requested);
+        console2.log("V4 stablecoin output", totalAmountOut);
+        assertLe(amountAllocated, requested);
+        assertEq(poolIds.length, target.uniV4PoolCount());
+        assertEq(allocations.length, poolIds.length);
+        assertEq(outputs.length, poolIds.length);
 
+        uint256 summedInputs;
         uint256 summedOutputs;
-        for (uint256 i; i < outputs.length; ++i) {
+        for (uint256 i; i < poolIds.length; ++i) {
+            summedInputs += allocations[i];
             summedOutputs += outputs[i];
+            if (allocations[i] == 0) {
+                assertEq(outputs[i], 0);
+            } else {
+                _assertConfiguredPoolQuote(
+                    target,
+                    i,
+                    poolIds[i],
+                    allocations[i]
+                );
+            }
         }
-        assertEq(totalAmountOut, summedOutputs);
+        assertEq(summedInputs, amountAllocated);
+        assertEq(summedOutputs, totalAmountOut);
+        (uint256 selectedPrice, bool usingLivePrice) = target.grovePrice();
+        if (amountAllocated == requested) {
+            assertGt(totalAmountOut, 0);
+            assertEq(price, (totalAmountOut * 1e30) / requested);
+            assertEq(selectedPrice, price);
+            assertTrue(usingLivePrice);
+        } else {
+            // Partial liquidity must never be presented as a full executable price.
+            console2.log("Incomplete live route: stored reference required");
+            assertEq(price, 0);
+            assertEq(selectedPrice, 0);
+            assertFalse(usingLivePrice);
+            target.setGrovePrice(0.008e18);
+            (selectedPrice, usingLivePrice) = target.grovePrice();
+            assertEq(selectedPrice, 0.008e18);
+            assertFalse(usingLivePrice);
+        }
     }
 
-    function test_currentDeploymentPoolsFillQuote() public {
-        vm.rollFork(25_761_300);
-        GroveCompounderAprOracle currentOracle = new GroveCompounderAprOracle();
-
-        bytes32[] memory poolIds = GroveUniV4PoolConfig.initialPools();
-        currentOracle.setUniV4Pools(poolIds);
-
-        (bytes32 configuredPool,,, address quoteToken, bool zeroForOne) = currentOracle.uniV4Pool(0);
-        assertEq(configuredPool, POOL_KYBER_USDT);
-        assertEq(quoteToken, USDT);
-        assertTrue(zeroForOne);
-
-        (uint256 totalAmountOut, uint256 amountAllocated, uint256 price,,,) = currentOracle.quoteUniV4Route();
-
-        assertEq(amountAllocated, currentOracle.GROVE_PRICE_QUOTE_AMOUNT());
-        assertGt(totalAmountOut, 78e6);
-        assertLt(totalAmountOut, 80e6);
-        assertGt(price, 78e14);
-        assertLt(price, 80e14);
+    function _assertConfiguredPoolQuote(
+        GroveCompounderAprOracle target,
+        uint256 index,
+        bytes32 poolId,
+        uint256 amountIn
+    ) internal {
+        (
+            bytes32 configuredPool,
+            uint24 fee,
+            int24 spacing,
+            address quoteToken,
+            bool zeroForOne
+        ) = target.uniV4Pool(index);
+        assertEq(poolId, configuredPool);
+        // Compare each contributing live pool with Uniswap, independent
+        // of whether the combined route currently has enough liquidity.
+        _assertSimulatorMatchesOfficialV4Quoter(
+            poolId,
+            zeroForOne ? GROVE : quoteToken,
+            zeroForOne ? quoteToken : GROVE,
+            fee,
+            spacing,
+            zeroForOne,
+            amountIn
+        );
     }
 
-    function _deviationBps(uint256 price, uint256 referencePrice) internal pure returns (uint256) {
-        return (price > referencePrice ? price - referencePrice : referencePrice - price) * 10_000 / referencePrice;
+    function _deviationBps(
+        uint256 price,
+        uint256 referencePrice
+    ) internal pure returns (uint256) {
+        return
+            ((
+                price > referencePrice
+                    ? price - referencePrice
+                    : referencePrice - price
+            ) * 10_000) / referencePrice;
     }
 
     function _setPoolCount(uint256 count) internal {
@@ -754,12 +1030,18 @@ contract GroveOracleTest is Test {
         oracle.setUniV4Pools(poolIds);
     }
 
-    function _singlePool(bytes32 poolId) internal pure returns (bytes32[] memory poolIds) {
+    function _singlePool(
+        bytes32 poolId
+    ) internal pure returns (bytes32[] memory poolIds) {
         poolIds = new bytes32[](1);
         poolIds[0] = poolId;
     }
 
-    function _initialOraclePools() internal pure returns (bytes32[] memory poolIds) {
+    function _initialOraclePools()
+        internal
+        pure
+        returns (bytes32[] memory poolIds)
+    {
         poolIds = new bytes32[](6);
         poolIds[0] = POOL_FIVE;
         poolIds[1] = POOL_ONE;
@@ -773,17 +1055,22 @@ contract GroveOracleTest is Test {
         _mockPool(poolId, uint160(1 << 96), 0, 1e24, 10_000);
     }
 
-    function _setMockedSinglePoolPrice(uint24 lpFee) internal returns (uint256 price) {
+    function _setMockedSinglePoolPrice(
+        uint24 lpFee
+    ) internal returns (uint256 price) {
         _setPoolCount(1);
         _mockPool(POOL_ONE, uint160(1 << 96), 0, 1e24, lpFee);
-        (,, price,,,) = oracle.quoteUniV4Route();
+        (, , price, , , ) = oracle.quoteUniV4Route();
         assertGt(price, 0);
     }
 
     function _mockIncompletePool(bytes32 poolId) internal {
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getSlot0.selector, poolId),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getSlot0.selector,
+                poolId
+            ),
             abi.encode(uint160(0), int24(0), uint24(0), uint24(0))
         );
     }
@@ -800,105 +1087,181 @@ contract GroveOracleTest is Test {
             address(oracle.UNISWAP_V4_POSITION_MANAGER()),
             // PositionManager indexes pool keys by the leading 25 bytes of the pool ID.
             // forge-lint: disable-next-line(unsafe-typecast)
-            abi.encodeWithSelector(IV4PositionManagerView.poolKeys.selector, bytes25(poolId)),
+            abi.encodeWithSelector(
+                IV4PositionManagerView.poolKeys.selector,
+                bytes25(poolId)
+            ),
             abi.encode(currency0, currency1, fee, tickSpacing, hooks)
         );
     }
 
-    function _mockPool(bytes32 poolId, uint160 sqrtPriceX96, int24 tick, uint128 liquidity, uint24 lpFee) internal {
+    function _mockPool(
+        bytes32 poolId,
+        uint160 sqrtPriceX96,
+        int24 tick,
+        uint128 liquidity,
+        uint24 lpFee
+    ) internal {
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getSlot0.selector, poolId),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getSlot0.selector,
+                poolId
+            ),
             abi.encode(sqrtPriceX96, tick, uint24(0), lpFee)
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getLiquidity.selector, poolId),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getLiquidity.selector,
+                poolId
+            ),
             abi.encode(liquidity)
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickBitmap.selector, poolId, int16(0)),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickBitmap.selector,
+                poolId,
+                int16(0)
+            ),
             abi.encode(uint256(0))
         );
     }
 
-    function _mockPoolWithProtocolFee(bytes32 poolId, uint24 packedProtocolFee, uint24 lpFee) internal {
+    function _mockPoolWithProtocolFee(
+        bytes32 poolId,
+        uint24 packedProtocolFee,
+        uint24 lpFee
+    ) internal {
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getSlot0.selector, poolId),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getSlot0.selector,
+                poolId
+            ),
             abi.encode(uint160(1 << 96), int24(0), packedProtocolFee, lpFee)
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getLiquidity.selector, poolId),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getLiquidity.selector,
+                poolId
+            ),
             abi.encode(uint128(1e24))
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickBitmap.selector, poolId, int16(0)),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickBitmap.selector,
+                poolId,
+                int16(0)
+            ),
             abi.encode(uint256(0))
         );
     }
 
-    function _mockFinitePool(bytes32 poolId, int24 tickSpacing, uint128 liquidity, uint24 lpFee) internal {
+    function _mockFinitePool(
+        bytes32 poolId,
+        int24 tickSpacing,
+        uint128 liquidity,
+        uint24 lpFee
+    ) internal {
         require(liquidity <= uint128(type(int128).max), "liquidity");
         _mockPool(poolId, uint160(1 << 96), 0, liquidity, lpFee);
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickBitmap.selector, poolId, int16(0)),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickBitmap.selector,
+                poolId,
+                int16(0)
+            ),
             abi.encode(uint256(1 << 1))
         );
         for (int16 wordPosition = 1; wordPosition <= 20; ++wordPosition) {
             vm.mockCall(
                 address(STATE_VIEW),
-                abi.encodeWithSelector(IUniswapV4StateView.getTickBitmap.selector, poolId, wordPosition),
+                abi.encodeWithSelector(
+                    IUniswapV4StateView.getTickBitmap.selector,
+                    poolId,
+                    wordPosition
+                ),
                 abi.encode(uint256(0))
             );
         }
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickLiquidity.selector, poolId, tickSpacing),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickLiquidity.selector,
+                poolId,
+                tickSpacing
+            ),
             // The bound above makes this conversion lossless.
             // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(liquidity, -int128(liquidity))
         );
     }
 
-    function _mockLiquidityAtWord(bytes32 poolId, int16 liquidityWord, uint128 liquidity) internal {
+    function _mockLiquidityAtWord(
+        bytes32 poolId,
+        int16 liquidityWord,
+        uint128 liquidity
+    ) internal {
         require(liquidity <= uint128(type(int128).max), "liquidity");
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getSlot0.selector, poolId),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getSlot0.selector,
+                poolId
+            ),
             abi.encode(uint160(1 << 96), int24(0), uint24(0), uint24(0))
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getLiquidity.selector, poolId),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getLiquidity.selector,
+                poolId
+            ),
             abi.encode(uint128(0))
         );
         for (int16 wordPosition; wordPosition < liquidityWord; ++wordPosition) {
             vm.mockCall(
                 address(STATE_VIEW),
-                abi.encodeWithSelector(IUniswapV4StateView.getTickBitmap.selector, poolId, wordPosition),
+                abi.encodeWithSelector(
+                    IUniswapV4StateView.getTickBitmap.selector,
+                    poolId,
+                    wordPosition
+                ),
                 abi.encode(uint256(0))
             );
         }
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickBitmap.selector, poolId, liquidityWord),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickBitmap.selector,
+                poolId,
+                liquidityWord
+            ),
             abi.encode(uint256(1) << 255)
         );
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickBitmap.selector, poolId, liquidityWord + 1),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickBitmap.selector,
+                poolId,
+                liquidityWord + 1
+            ),
             abi.encode(uint256(0))
         );
 
         int24 liquidityTick = (int24(liquidityWord) * 256) + 255;
         vm.mockCall(
             address(STATE_VIEW),
-            abi.encodeWithSelector(IUniswapV4StateView.getTickLiquidity.selector, poolId, liquidityTick),
+            abi.encodeWithSelector(
+                IUniswapV4StateView.getTickLiquidity.selector,
+                poolId,
+                liquidityTick
+            ),
             // The bound above makes this conversion lossless.
             // forge-lint: disable-next-line(unsafe-typecast)
             abi.encode(liquidity, int128(liquidity))
@@ -906,8 +1269,16 @@ contract GroveOracleTest is Test {
     }
 
     function _mockActiveRewards() internal {
-        vm.mockCall(oracle.STAKING(), abi.encodeWithSelector(IStaking.totalSupply.selector), abi.encode(uint256(1e50)));
-        vm.mockCall(oracle.STAKING(), abi.encodeWithSelector(IStaking.rewardRate.selector), abi.encode(uint256(1e18)));
+        vm.mockCall(
+            oracle.STAKING(),
+            abi.encodeWithSelector(IStaking.totalSupply.selector),
+            abi.encode(uint256(1e50))
+        );
+        vm.mockCall(
+            oracle.STAKING(),
+            abi.encodeWithSelector(IStaking.rewardRate.selector),
+            abi.encode(uint256(1e18))
+        );
         vm.mockCall(
             oracle.STAKING(),
             abi.encodeWithSelector(IStaking.periodFinish.selector),
@@ -915,10 +1286,21 @@ contract GroveOracleTest is Test {
         );
     }
 
-    function _assertSimulatorMatchesOfficialV4Quoter(bytes32 poolId, uint24 fee, int24 tickSpacing, uint256 amountIn)
-        internal
-    {
-        _assertSimulatorMatchesOfficialV4Quoter(poolId, USDC, GROVE, fee, tickSpacing, false, amountIn);
+    function _assertSimulatorMatchesOfficialV4Quoter(
+        bytes32 poolId,
+        uint24 fee,
+        int24 tickSpacing,
+        uint256 amountIn
+    ) internal {
+        _assertSimulatorMatchesOfficialV4Quoter(
+            poolId,
+            USDC,
+            GROVE,
+            fee,
+            tickSpacing,
+            false,
+            amountIn
+        );
     }
 
     function _assertSimulatorMatchesOfficialV4Quoter(
@@ -931,11 +1313,21 @@ contract GroveOracleTest is Test {
         uint256 amountIn
     ) internal {
         require(amountIn <= type(uint128).max, "amount in");
-        (uint256 amountConsumed, uint256 simulatedOut, bool valid, bool fullyFilled) =
-            simulator.quoteWithDirection(STATE_VIEW, poolId, tickSpacing, zeroForOne, amountIn);
+        (
+            uint256 amountConsumed,
+            uint256 simulatedOut,
+            bool valid,
+            bool fullyFilled
+        ) = simulator.quoteWithDirection(
+                STATE_VIEW,
+                poolId,
+                tickSpacing,
+                zeroForOne,
+                amountIn
+            );
         assertTrue(valid);
-        assertTrue(fullyFilled);
-        assertEq(amountConsumed, amountIn);
+        assertLe(amountConsumed, amountIn);
+        assertEq(fullyFilled, amountConsumed == amountIn);
 
         PoolKey memory poolKey = PoolKey({
             currency0: Currency.wrap(currency0),
@@ -944,16 +1336,35 @@ contract GroveOracleTest is Test {
             tickSpacing: tickSpacing,
             hooks: IHooks(address(0))
         });
-        (uint256 quotedOut,) = V4_QUOTER.quoteExactInputSingle(
-            IV4Quoter.QuoteExactSingleParams({
+        IV4Quoter.QuoteExactSingleParams memory params = IV4Quoter
+            .QuoteExactSingleParams({
                 poolKey: poolKey,
                 zeroForOne: zeroForOne,
                 // The bound above makes this conversion lossless.
                 // forge-lint: disable-next-line(unsafe-typecast)
                 exactAmount: uint128(amountIn),
                 hookData: bytes("")
-            })
-        );
+            });
+        if (amountConsumed == 0) {
+            assertEq(simulatedOut, 0);
+            // An empty pool is a valid live state. Require Uniswap's specific
+            // liquidity error; other failures must still fail the test.
+            vm.expectRevert(
+                abi.encodeWithSignature(
+                    "UnexpectedRevertBytes(bytes)",
+                    abi.encodeWithSignature(
+                        "NotEnoughLiquidity(bytes32)",
+                        poolId
+                    )
+                )
+            );
+            V4_QUOTER.quoteExactInputSingle(params);
+            return;
+        }
+        // The simulator intentionally stops at its step limit or a price bound.
+        // Compare the amount it actually consumed instead of requiring a full fill.
+        params.exactAmount = uint128(amountConsumed);
+        (uint256 quotedOut, ) = V4_QUOTER.quoteExactInputSingle(params);
 
         assertEq(simulatedOut, quotedOut);
     }

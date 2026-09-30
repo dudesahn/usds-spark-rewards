@@ -9,7 +9,7 @@ on:
 
 env:
   FOUNDRY_PROFILE: ci
-  ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
+  PUBLICNODE_ETH_RPC_URL: https://ethereum-rpc.publicnode.com
 
 jobs:
   coverage:
@@ -26,7 +26,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: v1.5.1
 
       - name: Install lcov
         run: sudo apt-get -y install lcov

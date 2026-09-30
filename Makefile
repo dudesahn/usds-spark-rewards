@@ -8,12 +8,11 @@ size  :; forge build --sizes
 # storage inspection
 inspect :; forge inspect ${contract} storageLayout
 
-# Reproducible historical mainnet fork; requires an archive-capable RPC.
-# Grove oracle tests also roll to their own historical liquidity fixtures.
-FORK_URL ?= $(ETH_RPC_URL)
-FORK_BLOCK ?= 26006032
+# Use current mainnet state by default; opt into a block only to reproduce a failure.
+# Historical reproductions use the archive-capable provider.
+FORK_URL ?= $(if $(strip $(FORK_BLOCK)),$(ETH_RPC_URL),$(PUBLICNODE_ETH_RPC_URL))
 export FORK_URL
-FORK_ARGS = --fork-url "$$FORK_URL" --fork-block-number "$(FORK_BLOCK)"
+FORK_ARGS = --fork-url "$$FORK_URL" $(if $(strip $(FORK_BLOCK)),--fork-block-number "$(FORK_BLOCK)")
 
 # if we want to run only matching tests, set that here
 test := test_operation_fixed

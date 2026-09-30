@@ -39,7 +39,7 @@ to deduplicate the checkout.
 
 ## Tests
 
-Export `ETH_RPC_URL` for an archive-capable Ethereum provider, or put it in an
+Export `PUBLICNODE_ETH_RPC_URL` for current Ethereum state, or put it in an
 untracked `.env` file. Python 3.10+ is needed for the maintenance tests; they use
 standard-library mocks and do not need Brownie, keys, or network access.
 
@@ -52,13 +52,11 @@ make test-python       # Grove maintenance policies, fees, and pool rotation
 make check-pools       # Generated Solidity pool list matches the JSON registry
 ```
 
-The default fork is mainnet block **26006032** for reproducible strategy tests.
-Grove oracle tests also use liquidity fixtures at **25668920** and **25761300**.
-These are historical state reads, so the test commands use `ETH_RPC_URL`.
-Override the starting block with `FORK_BLOCK` and the provider with `FORK_URL`.
-For tests that only need current state, prefer `PUBLICNODE_ETH_RPC_URL` and an
-explicit recent block. Changing the starting block does not replace the Grove
-oracle's historical liquidity fixtures.
+The default fork uses **current mainnet state** through `PUBLICNODE_ETH_RPC_URL`.
+Tests do not roll back to historical blocks. Changes to live integrations should
+surface in CI; controlled reward and liquidity cases are created inside tests.
+To reproduce a specific failure, opt into `FORK_BLOCK` and an archive-capable
+`ETH_RPC_URL`. `FORK_URL` can explicitly override the provider.
 
 ```sh
 make test-contract contract=SparkOperationTest
