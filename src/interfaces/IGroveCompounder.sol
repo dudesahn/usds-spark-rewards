@@ -38,9 +38,15 @@ interface IGroveCompounder is IBaseHealthCheck {
 
     function allowed(address _depositor) external view returns (bool);
 
-    function setMinAmountToSell(address _token, uint256 _minAmountToSell) external;
+    function setMinAmountToSell(
+        address _token,
+        uint256 _minAmountToSell
+    ) external;
 
-    function enableAuctionToken(address _token, uint256 _minAmountToSell) external;
+    function enableAuctionToken(
+        address _token,
+        uint256 _minAmountToSell
+    ) external;
 
     function setMinimumAuctionPrice(uint256 _minimumAuctionPrice) external;
 

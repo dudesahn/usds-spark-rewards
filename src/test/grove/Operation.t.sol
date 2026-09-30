@@ -18,20 +18,37 @@ contract GroveOperationTest is GroveSetup {
         assertEq(strategy.performanceFeeRecipient(), performanceFeeRecipient);
         assertEq(strategy.keeper(), keeper);
         assertEq(strategy.referral(), 2009);
-        assertEq(strategy.DEFAULT_MINIMUM_AUCTION_PRICE(), DEFAULT_MINIMUM_AUCTION_PRICE);
+        assertEq(
+            strategy.DEFAULT_MINIMUM_AUCTION_PRICE(),
+            DEFAULT_MINIMUM_AUCTION_PRICE
+        );
         assertEq(strategy.DEFAULT_AUCTION_STARTING_PRICE(), 10_000e18);
         assertEq(strategy.DEFAULT_AUCTION_STEP_DECAY_RATE(), 30);
         assertEq(strategy.minimumAuctionPrice(), DEFAULT_MINIMUM_AUCTION_PRICE);
-        AuctionFactory auctionFactory = AuctionFactory(strategy.AUCTION_FACTORY());
-        assertEq(address(auctionFactory), 0x55B3830B4D85e6868c73f00A2e857e9AdbF89568);
-        assertEq(auctionFactory.auctions(auctionFactory.numberOfAuctions() - 1), address(auction));
+        AuctionFactory auctionFactory = AuctionFactory(
+            strategy.AUCTION_FACTORY()
+        );
+        assertEq(
+            address(auctionFactory),
+            0x55B3830B4D85e6868c73f00A2e857e9AdbF89568
+        );
+        assertEq(
+            auctionFactory.auctions(auctionFactory.numberOfAuctions() - 1),
+            address(auction)
+        );
         assertEq(auction.receiver(), address(strategy));
         assertEq(auction.want(), address(asset));
         assertEq(auction.governance(), address(strategy));
         assertTrue(auction.governanceOnlyKick());
         assertEq(auction.minimumPrice(), DEFAULT_MINIMUM_AUCTION_PRICE);
-        assertEq(auction.startingPrice(), strategy.DEFAULT_AUCTION_STARTING_PRICE());
-        assertEq(auction.stepDecayRate(), strategy.DEFAULT_AUCTION_STEP_DECAY_RATE());
+        assertEq(
+            auction.startingPrice(),
+            strategy.DEFAULT_AUCTION_STARTING_PRICE()
+        );
+        assertEq(
+            auction.stepDecayRate(),
+            strategy.DEFAULT_AUCTION_STEP_DECAY_RATE()
+        );
         // TODO: add additional check on strat params
     }
 
@@ -133,7 +150,9 @@ contract GroveOperationTest is GroveSetup {
         vm.prank(keeper);
         strategy.report();
 
-        uint256 auctionBalance = ERC20(rewardsToken).balanceOf(address(auction));
+        uint256 auctionBalance = ERC20(rewardsToken).balanceOf(
+            address(auction)
+        );
         assertGt(auctionBalance, 0, "!auction");
 
         vm.prank(management);
@@ -146,8 +165,15 @@ contract GroveOperationTest is GroveSetup {
 
         assertEq(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
-        assertEq(ERC20(rewardsToken).balanceOf(address(auction)), auctionBalance);
-        assertGt(strategy.balanceOfRewards(), strategy.minAmountToSell(rewardsToken), "!rewards");
+        assertEq(
+            ERC20(rewardsToken).balanceOf(address(auction)),
+            auctionBalance
+        );
+        assertGt(
+            strategy.balanceOfRewards(),
+            strategy.minAmountToSell(rewardsToken),
+            "!rewards"
+        );
     }
 
     function test_auctionTakeTransfersPaymentAndRewards() public {
@@ -176,7 +202,10 @@ contract GroveOperationTest is GroveSetup {
 
         assertEq(rewardsTaken, rewardsAvailable);
         assertEq(ERC20(rewardsToken).balanceOf(buyer), rewardsAvailable);
-        assertEq(asset.balanceOf(address(strategy)), strategyAssetsBefore + paymentNeeded);
+        assertEq(
+            asset.balanceOf(address(strategy)),
+            strategyAssetsBefore + paymentNeeded
+        );
         assertEq(asset.balanceOf(buyer), 0);
         assertEq(auction.available(rewardsToken), 0);
         assertFalse(auction.isActive(rewardsToken));
@@ -212,11 +241,17 @@ contract GroveOperationTest is GroveSetup {
         // Report rewards into the auction.
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
-        console2.log("Profit from auction report:", profit / 1e18, "* 1e18 USDS");
+        console2.log(
+            "Profit from auction report:",
+            profit / 1e18,
+            "* 1e18 USDS"
+        );
         assertEq(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
-        uint256 rewardBalance = ERC20(strategy.REWARDS_TOKEN()).balanceOf(address(auction));
+        uint256 rewardBalance = ERC20(strategy.REWARDS_TOKEN()).balanceOf(
+            address(auction)
+        );
         assertGt(rewardBalance, 0, "!auction");
 
         // simulate our auction process
@@ -226,7 +261,11 @@ contract GroveOperationTest is GroveSetup {
         // Report profit
         vm.prank(keeper);
         (uint256 profitTwo, uint256 lossTwo) = strategy.report();
-        console2.log("Profit from auction report:", profitTwo / 1e18, "* 1e18 USDS");
+        console2.log(
+            "Profit from auction report:",
+            profitTwo / 1e18,
+            "* 1e18 USDS"
+        );
         assertGt(profitTwo, 0, "!profit");
         assertEq(lossTwo, 0, "!loss");
 
@@ -252,7 +291,11 @@ contract GroveOperationTest is GroveSetup {
         // Withdraw all funds
         vm.prank(user);
         strategy.redeem(_amount, user, user);
-        assertGt(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+        assertGt(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            "!final balance"
+        );
     }
 
     function test_operation_auction_extra() public {
@@ -272,12 +315,18 @@ contract GroveOperationTest is GroveSetup {
         // Report profit, should come through our auction
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
-        console2.log("Profit from auction report:", profit / 1e18, "* 1e18 USDS");
+        console2.log(
+            "Profit from auction report:",
+            profit / 1e18,
+            "* 1e18 USDS"
+        );
         assertEq(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
         // even though we don't get profit, we should have rewards in the auction contract
-        uint256 rewardBalance = ERC20(strategy.REWARDS_TOKEN()).balanceOf(address(auction));
+        uint256 rewardBalance = ERC20(strategy.REWARDS_TOKEN()).balanceOf(
+            address(auction)
+        );
         assertGt(rewardBalance, 0, "!auction");
 
         // fully unlock our profit
@@ -287,7 +336,11 @@ contract GroveOperationTest is GroveSetup {
         // Withdraw all funds
         vm.prank(user);
         strategy.redeem(_amount, user, user);
-        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+        assertGe(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            "!final balance"
+        );
     }
 
     function test_operation() public {
@@ -336,7 +389,11 @@ contract GroveOperationTest is GroveSetup {
         assertEq(auction.take(rewardsToken), rewardsAvailable);
         vm.stopPrank();
 
-        assertEq(ERC20(rewardsToken).balanceOf(buyer), rewardsAvailable, "!rewards out");
+        assertEq(
+            ERC20(rewardsToken).balanceOf(buyer),
+            rewardsAvailable,
+            "!rewards out"
+        );
         assertEq(strategy.balanceOfAsset(), paymentNeeded, "!payment in");
         assertFalse(auction.isActive(rewardsToken), "!settled");
 
@@ -346,7 +403,11 @@ contract GroveOperationTest is GroveSetup {
         assertEq(profit, paymentNeeded, "!realized profit");
         assertEq(loss, 0, "!realized loss");
         assertEq(strategy.balanceOfAsset(), 0, "!idle");
-        assertEq(strategy.balanceOfStake(), amount + paymentNeeded, "!reinvested");
+        assertEq(
+            strategy.balanceOfStake(),
+            amount + paymentNeeded,
+            "!reinvested"
+        );
 
         skip(strategy.profitMaxUnlockTime());
 
@@ -357,11 +418,18 @@ contract GroveOperationTest is GroveSetup {
         vm.prank(user);
         strategy.redeem(userShares, user, user);
 
-        assertEq(asset.balanceOf(user), balanceBefore + amount + paymentNeeded, "!final balance");
+        assertEq(
+            asset.balanceOf(user),
+            balanceBefore + amount + paymentNeeded,
+            "!final balance"
+        );
         assertEq(strategy.totalAssets(), 0, "!final assets");
     }
 
-    function test_profitableReport(uint256 _amount, uint16 _profitFactor) public {
+    function test_profitableReport(
+        uint256 _amount,
+        uint16 _profitFactor
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
         _profitFactor = uint16(bound(uint256(_profitFactor), 10, 9_000));
 
@@ -393,10 +461,17 @@ contract GroveOperationTest is GroveSetup {
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
-        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+        assertGe(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            "!final balance"
+        );
     }
 
-    function test_profitableReport_withFees(uint256 _amount, uint16 _profitFactor) public {
+    function test_profitableReport_withFees(
+        uint256 _amount,
+        uint16 _profitFactor
+    ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
         _profitFactor = uint16(bound(uint256(_profitFactor), 10, 9_000));
 
@@ -436,50 +511,62 @@ contract GroveOperationTest is GroveSetup {
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
-        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+        assertGe(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            "!final balance"
+        );
 
         vm.prank(performanceFeeRecipient);
-        strategy.redeem(expectedShares, performanceFeeRecipient, performanceFeeRecipient);
+        strategy.redeem(
+            expectedShares,
+            performanceFeeRecipient,
+            performanceFeeRecipient
+        );
 
         checkStrategyTotals(strategy, 0, 0, 0);
 
-        assertGe(asset.balanceOf(performanceFeeRecipient), expectedShares, "!perf fee out");
+        assertGe(
+            asset.balanceOf(performanceFeeRecipient),
+            expectedShares,
+            "!perf fee out"
+        );
     }
 
     function test_tendTrigger(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
-        (bool trigger,) = strategy.tendTrigger();
+        (bool trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
-        (trigger,) = strategy.tendTrigger();
+        (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
         // Skip some time
         skip(1 days);
 
-        (trigger,) = strategy.tendTrigger();
+        (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
         vm.prank(keeper);
         strategy.report();
 
-        (trigger,) = strategy.tendTrigger();
+        (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
         // Unlock Profits
         skip(strategy.profitMaxUnlockTime());
 
-        (trigger,) = strategy.tendTrigger();
+        (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
-        (trigger,) = strategy.tendTrigger();
+        (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
     }
 }

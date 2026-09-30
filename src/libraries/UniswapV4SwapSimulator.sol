@@ -39,20 +39,30 @@ library UniswapV4SwapSimulator {
         uint256 feeAmount;
     }
 
-    function loadState(IUniswapV4StateView stateView, bytes32 poolId, bool zeroForOne)
+    function loadState(
+        IUniswapV4StateView stateView,
+        bytes32 poolId,
+        bool zeroForOne
+    )
         internal
         view
         returns (State memory state, uint24 swapFee, bool initialized)
     {
         uint24 packedProtocolFee;
         uint24 lpFee;
-        (state.sqrtPriceX96, state.tick, packedProtocolFee, lpFee) = stateView.getSlot0(poolId);
-        if (state.sqrtPriceX96 == 0 || lpFee > SwapMath.MAX_SWAP_FEE) return (state, 0, false);
+        (state.sqrtPriceX96, state.tick, packedProtocolFee, lpFee) = stateView
+            .getSlot0(poolId);
+        if (state.sqrtPriceX96 == 0 || lpFee > SwapMath.MAX_SWAP_FEE)
+            return (state, 0, false);
 
         state.liquidity = stateView.getLiquidity(poolId);
 
-        uint16 protocolFee = zeroForOne ? packedProtocolFee.getZeroForOneFee() : packedProtocolFee.getOneForZeroFee();
-        swapFee = protocolFee == 0 ? lpFee : protocolFee.calculateSwapFee(lpFee);
+        uint16 protocolFee = zeroForOne
+            ? packedProtocolFee.getZeroForOneFee()
+            : packedProtocolFee.getOneForZeroFee();
+        swapFee = protocolFee == 0
+            ? lpFee
+            : protocolFee.calculateSwapFee(lpFee);
         initialized = swapFee < SwapMath.MAX_SWAP_FEE;
     }
 
@@ -65,12 +75,15 @@ library UniswapV4SwapSimulator {
         uint24 swapFee,
         State memory state
     ) internal view returns (Preview memory preview) {
-        if (amountIn == 0 || amountIn > uint256(type(int256).max)) return preview;
+        if (amountIn == 0 || amountIn > uint256(type(int256).max))
+            return preview;
 
         // The upper bound above makes this conversion lossless.
         // forge-lint: disable-next-line(unsafe-typecast)
         int256 amountSpecifiedRemaining = -int256(amountIn);
-        uint160 sqrtPriceLimitX96 = zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1;
+        uint160 sqrtPriceLimitX96 = zeroForOne
+            ? TickMath.MIN_SQRT_PRICE + 1
+            : TickMath.MAX_SQRT_PRICE - 1;
 
         for (uint256 i; i < MAX_SWAP_STEPS; ++i) {
             if (amountSpecifiedRemaining == 0) {
@@ -81,21 +94,46 @@ library UniswapV4SwapSimulator {
                 return preview;
             }
             if (state.sqrtPriceX96 == sqrtPriceLimitX96) {
-                return _finishPartial(preview, state, amountIn, amountSpecifiedRemaining);
+                return
+                    _finishPartial(
+                        preview,
+                        state,
+                        amountIn,
+                        amountSpecifiedRemaining
+                    );
             }
 
             Step memory step;
             step.sqrtPriceStartX96 = state.sqrtPriceX96;
-            (step.tickNext, step.initialized) =
-                _nextInitializedTickWithinOneWord(stateView, poolId, state.tick, tickSpacing, zeroForOne);
+            (
+                step.tickNext,
+                step.initialized
+            ) = _nextInitializedTickWithinOneWord(
+                stateView,
+                poolId,
+                state.tick,
+                tickSpacing,
+                zeroForOne
+            );
 
-            if (step.tickNext <= TickMath.MIN_TICK) step.tickNext = TickMath.MIN_TICK;
-            if (step.tickNext >= TickMath.MAX_TICK) step.tickNext = TickMath.MAX_TICK;
+            if (step.tickNext <= TickMath.MIN_TICK)
+                step.tickNext = TickMath.MIN_TICK;
+            if (step.tickNext >= TickMath.MAX_TICK)
+                step.tickNext = TickMath.MAX_TICK;
 
             step.sqrtPriceNextX96 = TickMath.getSqrtPriceAtTick(step.tickNext);
-            (state.sqrtPriceX96, step.amountIn, step.amountOut, step.feeAmount) = SwapMath.computeSwapStep(
+            (
                 state.sqrtPriceX96,
-                SwapMath.getSqrtPriceTarget(zeroForOne, step.sqrtPriceNextX96, sqrtPriceLimitX96),
+                step.amountIn,
+                step.amountOut,
+                step.feeAmount
+            ) = SwapMath.computeSwapStep(
+                state.sqrtPriceX96,
+                SwapMath.getSqrtPriceTarget(
+                    zeroForOne,
+                    step.sqrtPriceNextX96,
+                    sqrtPriceLimitX96
+                ),
                 state.liquidity,
                 amountSpecifiedRemaining,
                 swapFee
@@ -106,15 +144,27 @@ library UniswapV4SwapSimulator {
 
             if (state.sqrtPriceX96 == step.sqrtPriceNextX96) {
                 if (step.initialized) {
-                    (, int128 liquidityNet) = stateView.getTickLiquidity(poolId, step.tickNext);
+                    (, int128 liquidityNet) = stateView.getTickLiquidity(
+                        poolId,
+                        step.tickNext
+                    );
                     if (zeroForOne) liquidityNet = -liquidityNet;
-                    state.liquidity = LiquidityMath.addDelta(state.liquidity, liquidityNet);
+                    state.liquidity = LiquidityMath.addDelta(
+                        state.liquidity,
+                        liquidityNet
+                    );
                 }
                 state.tick = zeroForOne ? step.tickNext - 1 : step.tickNext;
             } else if (state.sqrtPriceX96 != step.sqrtPriceStartX96) {
                 state.tick = TickMath.getTickAtSqrtPrice(state.sqrtPriceX96);
             } else {
-                return _finishPartial(preview, state, amountIn, amountSpecifiedRemaining);
+                return
+                    _finishPartial(
+                        preview,
+                        state,
+                        amountIn,
+                        amountSpecifiedRemaining
+                    );
             }
         }
 
@@ -128,14 +178,16 @@ library UniswapV4SwapSimulator {
             return preview;
         }
 
-        return _finishPartial(preview, state, amountIn, amountSpecifiedRemaining);
+        return
+            _finishPartial(preview, state, amountIn, amountSpecifiedRemaining);
     }
 
-    function _finishPartial(Preview memory preview, State memory state, uint256 requested, int256 remaining)
-        private
-        pure
-        returns (Preview memory)
-    {
+    function _finishPartial(
+        Preview memory preview,
+        State memory state,
+        uint256 requested,
+        int256 remaining
+    ) private pure returns (Preview memory) {
         preview.state = state;
         // Exact-input remaining amounts stay nonpositive throughout the simulation.
         // forge-lint: disable-next-line(unsafe-typecast)
@@ -156,32 +208,55 @@ library UniswapV4SwapSimulator {
 
             if (lte) {
                 (int16 wordPosition, uint8 bitPosition) = _position(compressed);
-                uint256 mask = type(uint256).max >> (uint256(type(uint8).max) - bitPosition);
-                uint256 masked = stateView.getTickBitmap(poolId, wordPosition) & mask;
+                uint256 mask = type(uint256).max >>
+                    (uint256(type(uint8).max) - bitPosition);
+                uint256 masked = stateView.getTickBitmap(poolId, wordPosition) &
+                    mask;
 
                 initialized = masked != 0;
                 next = initialized
-                    ? (compressed - int24(uint24(bitPosition - BitMath.mostSignificantBit(masked)))) * tickSpacing
+                    ? (compressed -
+                        int24(
+                            uint24(
+                                bitPosition - BitMath.mostSignificantBit(masked)
+                            )
+                        )) * tickSpacing
                     : (compressed - int24(uint24(bitPosition))) * tickSpacing;
             } else {
-                (int16 wordPosition, uint8 bitPosition) = _position(++compressed);
+                (int16 wordPosition, uint8 bitPosition) = _position(
+                    ++compressed
+                );
                 uint256 mask = ~((uint256(1) << bitPosition) - 1);
-                uint256 masked = stateView.getTickBitmap(poolId, wordPosition) & mask;
+                uint256 masked = stateView.getTickBitmap(poolId, wordPosition) &
+                    mask;
 
                 initialized = masked != 0;
                 next = initialized
-                    ? (compressed + int24(uint24(BitMath.leastSignificantBit(masked) - bitPosition))) * tickSpacing
-                    : (compressed + int24(uint24(type(uint8).max - bitPosition))) * tickSpacing;
+                    ? (compressed +
+                        int24(
+                            uint24(
+                                BitMath.leastSignificantBit(masked) -
+                                    bitPosition
+                            )
+                        )) * tickSpacing
+                    : (compressed +
+                        int24(uint24(type(uint8).max - bitPosition))) *
+                        tickSpacing;
             }
         }
     }
 
-    function _compress(int24 tick, int24 tickSpacing) private pure returns (int24 compressed) {
+    function _compress(
+        int24 tick,
+        int24 tickSpacing
+    ) private pure returns (int24 compressed) {
         compressed = tick / tickSpacing;
         if (tick < 0 && tick % tickSpacing != 0) --compressed;
     }
 
-    function _position(int24 tick) private pure returns (int16 wordPosition, uint8 bitPosition) {
+    function _position(
+        int24 tick
+    ) private pure returns (int16 wordPosition, uint8 bitPosition) {
         // A valid Uniswap tick is bounded tightly enough for its bitmap word index.
         // forge-lint: disable-next-line(unsafe-typecast)
         wordPosition = int16(tick >> 8);

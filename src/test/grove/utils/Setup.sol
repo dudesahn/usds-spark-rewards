@@ -85,9 +85,13 @@ contract GroveSetup is Test, IEvents {
 
         // manually top-up rewards so we don't run into EOW with no rewards
         uint256 periodFinish = IStaking(staking).periodFinish();
-        uint256 timeLeft = periodFinish > block.timestamp ? periodFinish - block.timestamp : 0;
+        uint256 timeLeft = periodFinish > block.timestamp
+            ? periodFinish - block.timestamp
+            : 0;
         uint256 week = 86400 * 7;
-        uint256 toSend = timeLeft < week ? IStaking(staking).rewardRate() * (week - timeLeft) : 0; // use current rewardRate, scaled by week time elapsed
+        uint256 toSend = timeLeft < week
+            ? IStaking(staking).rewardRate() * (week - timeLeft)
+            : 0; // use current rewardRate, scaled by week time elapsed
         if (toSend > 0) {
             airdrop(ERC20(strategy.REWARDS_TOKEN()), staking, toSend * 2); // add rewards without clobbering already-funded emissions
             vm.prank(IStaking(staking).rewardsDistribution());
@@ -106,7 +110,9 @@ contract GroveSetup is Test, IEvents {
     function setUpStrategy() public returns (address) {
         // we save the strategy as a IGroveCompounder to give it the needed interface
         vm.startPrank(management);
-        IGroveCompounder _strategy = IGroveCompounder(address(new GroveCompounder()));
+        IGroveCompounder _strategy = IGroveCompounder(
+            address(new GroveCompounder())
+        );
 
         // setup the strategy
         _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
@@ -145,12 +151,22 @@ contract GroveSetup is Test, IEvents {
 
         // check for reward token balance in auction
         uint256 rewardBalance = ERC20(rewardsToken).balanceOf(address(auction));
-        uint256 strategyBalance = ERC20(rewardsToken).balanceOf(address(strategy));
-        console2.log("Reward token sitting in our strategy", strategyBalance / 1e18, "* 1e18");
+        uint256 strategyBalance = ERC20(rewardsToken).balanceOf(
+            address(strategy)
+        );
+        console2.log(
+            "Reward token sitting in our strategy",
+            strategyBalance / 1e18,
+            "* 1e18"
+        );
 
         // if we have reward tokens, sweep it out, and send back our designated profitAmount
         if (rewardBalance > 0) {
-            console2.log("Reward token sitting in our auction", rewardBalance / 1e18, "* 1e18");
+            console2.log(
+                "Reward token sitting in our auction",
+                rewardBalance / 1e18,
+                "* 1e18"
+            );
 
             vm.prank(address(auction));
             assertTrue(ERC20(rewardsToken).transfer(user, rewardBalance));
@@ -162,7 +178,11 @@ contract GroveSetup is Test, IEvents {
         assertEq(rewardBalance, 0, "!rewardBalance");
     }
 
-    function depositIntoStrategy(IGroveCompounder _strategy, address _user, uint256 _amount) public {
+    function depositIntoStrategy(
+        IGroveCompounder _strategy,
+        address _user,
+        uint256 _amount
+    ) public {
         vm.prank(_user);
         asset.approve(address(_strategy), _amount);
 
@@ -170,7 +190,11 @@ contract GroveSetup is Test, IEvents {
         _strategy.deposit(_amount, _user);
     }
 
-    function mintAndDepositIntoStrategy(IGroveCompounder _strategy, address _user, uint256 _amount) public {
+    function mintAndDepositIntoStrategy(
+        IGroveCompounder _strategy,
+        address _user,
+        uint256 _amount
+    ) public {
         airdrop(asset, _user, _amount);
         depositIntoStrategy(_strategy, _user, _amount);
     }
@@ -183,7 +207,9 @@ contract GroveSetup is Test, IEvents {
         uint256 _totalIdle
     ) public {
         uint256 _assets = _strategy.totalAssets();
-        uint256 _balance = ERC20(_strategy.asset()).balanceOf(address(_strategy));
+        uint256 _balance = ERC20(_strategy.asset()).balanceOf(
+            address(_strategy)
+        );
         uint256 _idle = _balance > _assets ? _assets : _balance;
         uint256 _debt = _assets - _idle;
         assertEq(_assets, _totalAssets, "!totalAssets");

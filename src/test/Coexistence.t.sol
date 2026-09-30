@@ -13,8 +13,12 @@ contract CompounderCoexistenceTest is Test {
         address management = address(1);
         address user = address(10);
         vm.startPrank(management);
-        ISparkCompounder spark = ISparkCompounder(address(new SparkCompounder()));
-        IGroveCompounder grove = IGroveCompounder(address(new GroveCompounder()));
+        ISparkCompounder spark = ISparkCompounder(
+            address(new SparkCompounder())
+        );
+        IGroveCompounder grove = IGroveCompounder(
+            address(new GroveCompounder())
+        );
         spark.setOpenDeposits(true);
         grove.setOpen(true);
         vm.stopPrank();

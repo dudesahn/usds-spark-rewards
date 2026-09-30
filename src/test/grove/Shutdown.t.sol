@@ -31,7 +31,11 @@ contract GroveShutdownTest is GroveSetup {
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
-        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+        assertGe(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            "!final balance"
+        );
     }
 
     function test_emergencyWithdraw_maxUint(uint256 _amount) public {
@@ -62,7 +66,11 @@ contract GroveShutdownTest is GroveSetup {
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
-        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
+        assertGe(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            "!final balance"
+        );
     }
 
     function test_shutdownCanRealizePendingRewardsThroughAuction() public {
@@ -103,8 +111,16 @@ contract GroveShutdownTest is GroveSetup {
         assertEq(auction.take(rewardsToken), rewardsAvailable);
         vm.stopPrank();
 
-        assertEq(ERC20(rewardsToken).balanceOf(buyer), rewardsAvailable, "!rewards");
-        assertEq(strategy.balanceOfAsset(), amount + paymentNeeded, "!proceeds");
+        assertEq(
+            ERC20(rewardsToken).balanceOf(buyer),
+            rewardsAvailable,
+            "!rewards"
+        );
+        assertEq(
+            strategy.balanceOfAsset(),
+            amount + paymentNeeded,
+            "!proceeds"
+        );
 
         // A final report recognizes the proceeds but leaves all USDS idle while shutdown.
         vm.prank(keeper);
@@ -113,7 +129,11 @@ contract GroveShutdownTest is GroveSetup {
         assertEq(profit, paymentNeeded, "!profit");
         assertEq(loss, 0, "!loss");
         assertEq(strategy.balanceOfStake(), 0, "!restaked");
-        assertEq(strategy.totalAssets(), amount + paymentNeeded, "!totalAssets");
+        assertEq(
+            strategy.totalAssets(),
+            amount + paymentNeeded,
+            "!totalAssets"
+        );
     }
 
     function test_shutdownCannotDepositToRecoverLateAuctionProceeds() public {
@@ -161,7 +181,11 @@ contract GroveShutdownTest is GroveSetup {
         vm.stopPrank();
 
         assertEq(strategy.totalSupply(), 0, "!final supply");
-        assertEq(strategy.balanceOfAsset(), paymentNeeded, "!stranded proceeds");
+        assertEq(
+            strategy.balanceOfAsset(),
+            paymentNeeded,
+            "!stranded proceeds"
+        );
     }
 
     // TODO: Add tests for any emergency function added.

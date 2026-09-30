@@ -20,7 +20,8 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
     address public immutable auction;
 
     /// @notice Yearn AuctionFactory used so taker bots can more easily discover the auction.
-    AuctionFactory public constant AUCTION_FACTORY = AuctionFactory(0x55B3830B4D85e6868c73f00A2e857e9AdbF89568);
+    AuctionFactory public constant AUCTION_FACTORY =
+        AuctionFactory(0x55B3830B4D85e6868c73f00A2e857e9AdbF89568);
 
     /// @notice Default minimum GROVE auction price in USDS terms, scaled to 1e18.
     uint256 public constant DEFAULT_MINIMUM_AUCTION_PRICE = 6e15;
@@ -38,12 +39,15 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
     address public immutable REWARDS_TOKEN;
 
     /// @notice Staking contract we use
-    IStaking public constant STAKING = IStaking(0x4E41488C19cD35EB4de3083Fc3e204854c75c86a);
+    IStaking public constant STAKING =
+        IStaking(0x4E41488C19cD35EB4de3083Fc3e204854c75c86a);
 
     /// @notice Don't bother spending the gas to stake dust
     uint256 internal constant DUST = 1e18;
 
-    constructor() BaseHealthCheck(STAKING.stakingToken(), "Grove USDS Compounder") {
+    constructor()
+        BaseHealthCheck(STAKING.stakingToken(), "Grove USDS Compounder")
+    {
         require(!STAKING.paused(), "!paused");
         REWARDS_TOKEN = STAKING.rewardsToken();
 
@@ -55,7 +59,10 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
 
         Auction _auction = Auction(
             AUCTION_FACTORY.createNewAuction(
-                address(asset), address(this), address(this), DEFAULT_AUCTION_STARTING_PRICE
+                address(asset),
+                address(this),
+                address(this),
+                DEFAULT_AUCTION_STARTING_PRICE
             )
         );
         _auction.enable(REWARDS_TOKEN);
@@ -93,7 +100,11 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
         STAKING.withdraw(_amount);
     }
 
-    function _harvestAndReport() internal override returns (uint256 _totalAssets) {
+    function _harvestAndReport()
+        internal
+        override
+        returns (uint256 _totalAssets)
+    {
         // get our rewards. if no rewards is a noop so no worries about reverts
         _claimRewards();
 
@@ -118,7 +129,9 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
         _freeFunds(_amount);
     }
 
-    function availableDepositLimit(address _receiver) public view override returns (uint256) {
+    function availableDepositLimit(
+        address _receiver
+    ) public view override returns (uint256) {
         if (STAKING.paused()) {
             return 0;
         }
@@ -184,7 +197,10 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
      * @param _token Token to set the minimum for.
      * @param _minAmountToSell minimum amount to sell in wei.
      */
-    function setMinAmountToSell(address _token, uint256 _minAmountToSell) external onlyManagement {
+    function setMinAmountToSell(
+        address _token,
+        uint256 _minAmountToSell
+    ) external onlyManagement {
         _setMinAmountToSell(_token, _minAmountToSell);
     }
 
@@ -195,7 +211,10 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
      * @param _token Token to enable for auctions.
      * @param _minAmountToSell minimum amount to sell in wei.
      */
-    function enableAuctionToken(address _token, uint256 _minAmountToSell) external onlyManagement {
+    function enableAuctionToken(
+        address _token,
+        uint256 _minAmountToSell
+    ) external onlyManagement {
         require(_token != address(asset), "!asset");
         Auction(auction).enable(_token);
         _setMinAmountToSell(_token, _minAmountToSell);
@@ -207,7 +226,9 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
      *      with at least this minimum price before rewards can be kicked.
      * @param _minimumAuctionPrice Minimum auction price in USDS terms, scaled to 1e18.
      */
-    function setMinimumAuctionPrice(uint256 _minimumAuctionPrice) external onlyManagement {
+    function setMinimumAuctionPrice(
+        uint256 _minimumAuctionPrice
+    ) external onlyManagement {
         Auction(auction).setMinimumPrice(_minimumAuctionPrice);
         minimumAuctionPrice = _minimumAuctionPrice;
     }
@@ -217,7 +238,9 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
      * @dev Can only be called by management. Reverts while any enabled auction is active.
      * @param _startingPrice New starting price, scaled to 1e18.
      */
-    function setAuctionStartingPrice(uint256 _startingPrice) external onlyManagement {
+    function setAuctionStartingPrice(
+        uint256 _startingPrice
+    ) external onlyManagement {
         Auction(auction).setStartingPrice(_startingPrice);
     }
 
@@ -226,7 +249,9 @@ contract GroveCompounder is BaseSwapper, BaseHealthCheck {
      * @dev Can only be called by management. Reverts while any enabled auction is active.
      * @param _stepDecayRate New step decay rate in basis points.
      */
-    function setAuctionStepDecayRate(uint256 _stepDecayRate) external onlyManagement {
+    function setAuctionStepDecayRate(
+        uint256 _stepDecayRate
+    ) external onlyManagement {
         Auction(auction).setStepDecayRate(_stepDecayRate);
     }
 
