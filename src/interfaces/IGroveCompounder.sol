@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {IBaseHealthCheck} from "@periphery/Bases/HealthCheck/IBaseHealthCheck.sol";
 
-interface IStrategyInterface is IBaseHealthCheck {
+interface IGroveCompounder is IBaseHealthCheck {
     function balanceOfAsset() external view returns (uint256);
 
     function balanceOfStake() external view returns (uint256);

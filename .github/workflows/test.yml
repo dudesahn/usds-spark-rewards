@@ -5,6 +5,8 @@ on:
     branches:
     - master
     - develop
+    - grove
+    - merge-grove
   pull_request:
 
 env:
@@ -13,19 +15,21 @@ env:
 jobs:
   test:
     strategy:
-      fail-fast: true
+      fail-fast: false
+      matrix:
+        suite: [spark, grove, coexistence]
 
-    name: Foundry project
+    name: Foundry ${{ matrix.suite }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: v1.5.1
 
       - name: Run Forge build
         run: |
@@ -34,6 +38,17 @@ jobs:
         id: build
 
       - name: Run Forge tests
-        run: |
-          forge test -vvv --fork-url ${{ secrets.ETH_RPC_URL }}
+        env:
+          ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
+        run: make test-${{ matrix.suite }}
         id: test
+
+  maintenance:
+    name: Grove maintenance scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: make test-python check-pools

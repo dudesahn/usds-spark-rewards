@@ -28,5 +28,8 @@
       "name": "v4.0.0",
       "rev": "e50237c43811bd9b526eff40f26772152a42daba"
     }
+  },
+  "lib/spark-periphery": {
+    "rev": "3bbde241fbda97537b7d6ad13bd5c8f4bf886472"
   }
 }

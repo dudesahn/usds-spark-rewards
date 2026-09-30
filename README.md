@@ -1,139 +1,118 @@
-# Tokenized Strategy Mix for Yearn V3 strategies
+# Spark and Grove USDS compounders
 
-This repo will allow you to write, test and deploy V3 "Tokenized Strategies" using [Foundry](https://book.getfoundry.sh/).
+This repository contains both Ethereum mainnet strategies and their APR oracles.
+They compile and run in one Foundry project; switching branches is unnecessary.
 
-You will only need to override the three functions in Strategy.sol of `_deployFunds`, `_freeFunds` and `_harvestAndReport`. With the option to also override `_tend`, `_tendTrigger`, `availableDepositLimit`, `availableWithdrawLimit` and `_emergencyWithdraw` if desired.
+The integration lives on `merge-grove`. The `oracle` branch at `dded1b2` and
+`grove` at `5084dee` remain unchanged as standalone comparison snapshots.
+`master` at `59cf4ec` has the same tracked contents as `oracle`.
 
-For a more complete overview of how the Tokenized Strategies work please visit the [TokenizedStrategy Repo](https://github.com/yearn/tokenized-strategy).
+| | Spark | Grove |
+| --- | --- | --- |
+| Strategy | `src/SparkCompounder.sol` | `src/GroveCompounder.sol` |
+| APR oracle | `src/periphery/SparkCompounderAprOracle.sol` | `src/periphery/GroveCompounderAprOracle.sol` |
+| Strategy interface | `src/interfaces/ISparkCompounder.sol` | `src/interfaces/IGroveCompounder.sol` |
+| Test suite | `src/test/spark/` | `src/test/grove/` |
+| Asset / reward | USDS / SPK | USDS / GROVE |
+| TokenizedStrategy API | 3.0.4 | 3.1.0 |
+| Reward sales | UniV3 + PSM, or a configured auction | Strategy-owned auction |
 
-## How to start
+The interfaces are deliberately separate: Spark has a single minimum-sale amount
+and `setOpenDeposits`, while Grove has per-token minimums and `setOpen`.
 
-### Requirements
+## Dependencies and build
 
-- First you will need to install [Foundry](https://book.getfoundry.sh/getting-started/installation).
-NOTE: If you are on a windows machine it is recommended to use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
-- Install [Node.js](https://nodejs.org/en/download/package-manager/)
-
-### Clone this repository
-
-```sh
-git clone --recursive https://github.com/yearn/tokenized-strategy-foundry-mix
-
-cd tokenized-strategy-foundry-mix
-
-yarn
-```
-
-### Set your environment Variables
-
-Use the `.env.example` template to create a `.env` file and store the environement variables. You will need to populate the `RPC_URL` for the desired network(s). RPC url can be obtained from various providers, including [Ankr](https://www.ankr.com/rpc/) (no sign-up required) and [Infura](https://infura.io/).
-
-Use .env file
-
-1. Make a copy of `.env.example`
-2. Add the value for `ETH_RPC_URL` and other example vars
-     NOTE: If you set up a global environment variable, that will take precedence.
-
-### Build the project
+Use Foundry v1.5.1 and Solidity 0.8.28 (configured in `foundry.toml`). Initialize
+the pinned dependencies after cloning or updating this branch:
 
 ```sh
+git submodule update --init --recursive
 make build
 ```
 
-Run tests
+Spark's `lib/spark-periphery` is pinned to `3bbde241` and includes TokenizedStrategy
+`82806289` (3.0.4). Grove keeps `lib/tokenized-strategy-periphery` at `ab942b24` and
+`lib/tokenized-strategy` at `8c8929f1` (3.1.0). Explicit import mappings prevent one
+strategy from accidentally compiling against the other's dependency version.
+Update these pins intentionally; do not replace Spark's legacy dependency merely
+to deduplicate the checkout.
+
+## Tests
+
+Export `ETH_RPC_URL` for an archive-capable Ethereum provider, or put it in an
+untracked `.env` file. Python 3.10+ is needed for the maintenance tests; they use
+standard-library mocks and do not need Brownie, keys, or network access.
 
 ```sh
-make test
+make test               # Both Foundry suites, coexistence, Python, and pool config
+make test-spark         # Spark operations, shutdown, function signatures, APR
+make test-grove         # Grove operations, shutdown, function signatures, APR
+make test-coexistence   # Deposit into both strategies and redeem independently
+make test-python       # Grove maintenance policies, fees, and pool rotation
+make check-pools       # Generated Solidity pool list matches the JSON registry
 ```
 
-## Strategy Writing
-
-For a complete guide to creating a Tokenized Strategy please visit: https://docs.yearn.fi/developers/v3/strategy_writing_guide
-
-NOTE: Compiler defaults to 8.23 but it can be adjusted in the foundry toml.
-
-## Testing
-
-Due to the nature of the BaseStrategy utilizing an external contract for the majority of its logic, the default interface for any tokenized strategy will not allow proper testing of all functions. Testing of your Strategy should utilize the pre-built [IStrategyInterface](https://github.com/yearn/tokenized-strategy-foundry-mix/blob/master/src/interfaces/IStrategyInterface.sol) to cast any deployed strategy through for testing, as seen in the Setup example. You can add any external functions that you add for your specific strategy to this interface to be able to test all functions with one variable.
-
-Example:
-
-```solidity
-Strategy _strategy = new Strategy(asset, name);
-IStrategyInterface strategy =  IStrategyInterface(address(_strategy));
-```
-
-Due to the permissionless nature of the tokenized Strategies, all tests are written without integration with any meta vault funding it. While those tests can be added, all V3 vaults utilize the ERC-4626 standard for deposit/withdraw and accounting, so they can be plugged in easily to any number of different vaults with the same `asset.`
-
-Tests run in fork environment, you need to complete the full installation and setup to be able to run these commands.
+The default fork is mainnet block **26006032** for reproducible strategy tests.
+Grove oracle tests also use liquidity fixtures at **25668920** and **25761300**.
+These are historical state reads, so the test commands use `ETH_RPC_URL`.
+Override the starting block with `FORK_BLOCK` and the provider with `FORK_URL`.
+For tests that only need current state, prefer `PUBLICNODE_ETH_RPC_URL` and an
+explicit recent block. Changing the starting block does not replace the Grove
+oracle's historical liquidity fixtures.
 
 ```sh
-make test
+make test-contract contract=SparkOperationTest
+make test-contract contract=GroveOracleTest
+make test-test test=test_bothStrategiesKeepIndependentPositions
 ```
 
-Run tests with traces (very useful)
+The CI test matrix runs Spark, Grove, and coexistence independently. A separate
+job runs the Python tests and pool-config check.
+
+## Deployment entry points
+
+| Script | Purpose |
+| --- | --- |
+| `script/spark/DeploySparkStrategy.s.sol:DeploySparkStrategy` | New Spark strategy with its existing constructor defaults |
+| `script/spark/DeploySparkOracle.s.sol:DeploySparkOracle` | Spark APR oracle only |
+| `script/grove/DeployGroveStrategy.s.sol:DeployGroveStrategy` | New Grove strategy with its own auction |
+| `script/grove/DeployGroveOracle.s.sol:DeployGroveOracle` | Grove APR oracle only, seeded with the registry's pool list |
+
+`script/grove/DeployGroveStrategyAndOracle.s.sol` is retained as a **historical
+record**, not a deployment recommendation. Old receipts stay under their
+original `broadcast/` paths; the old shared `DeployStrategyAndOracle` name was
+used on both branches. Those paths are not current script entry points.
+
+Use `forge script` without `--broadcast` to simulate deployment. Register a newly
+deployed oracle in Yearn's APR registry and configure strategy roles/deposits as
+appropriate before using it. A new Spark strategy defaults to UniV3 sales;
+configure its auction before enabling auction sales.
+
+## Grove maintenance
+
+Use the Brownie environment for these scripts. Preview first:
 
 ```sh
-make trace
+brownie run sync_kyber_v4_pools --network mainnet
+brownie run refresh_grove_price --network mainnet
 ```
 
-Run specific test contract (e.g. `test/StrategyOperation.t.sol`)
+Add `BROADCAST=true` to apply the proposed transactions. Pool sync records positive
+contributions at 10k, 50k, 100k, 500k, and 1M GROVE, plus the oracle's own 10k quote.
+When full, it replaces the least recently contributing idle pool. Existing
+contributors are protected; pools with unknown contribution history go first.
+`APPLY_REGISTRY=true` saves only the local history and deployment pool snapshot.
+Default previews do not save observations.
 
-```sh
-make test-contract contract=StrategyOperationsTest
-```
+The **500k GROVE** Kyber quote drives the stored-price refresh and auction-floor
+recommendation. The 100k and 1M quotes are comparisons. The reference refresh is
+due at 36 hours or a 10% price move; the recommended auction floor is 20% below
+the reference. `KYBER_QUOTE_AMOUNT` overrides the reference size in whole GROVE.
 
-Run specific test contract with traces (e.g. `test/StrategyOperation.t.sol`)
+Maintenance transactions use a **0.01 gwei tip** and a max fee of **3 × base fee +
+tip**. A current base fee above **0.5 gwei**, or unavailable fee data, skips the
+send with a warning. Gas is checked before account loading and again before
+sending. A skipped pool transaction leaves the local pool files unchanged.
 
-```sh
-make trace-contract contract=StrategyOperationsTest
-```
-
-See here for some tips on testing [`Testing Tips`](https://book.getfoundry.sh/forge/tests.html)
-
-When testing on chains other than mainnet you will need to make sure a valid `CHAIN_RPC_URL` for that chain is set in your .env. You will then need to simply adjust the variable that RPC_URL is set to in the Makefile to match your chain.
-
-To update to a new API version of the TokenizeStrategy you will need to simply remove and reinstall the dependency.
-
-### Test Coverage
-
-Run the following command to generate a test coverage:
-
-```sh
-make coverage
-```
-
-To generate test coverage report in HTML, you need to have installed [`lcov`](https://github.com/linux-test-project/lcov) and run:
-
-```sh
-make coverage-html
-```
-
-The generated report will be in `coverage-report/index.html`.
-
-### Deployment
-
-#### Contract Verification
-
-Once the Strategy is fully deployed and verified, you will need to verify the TokenizedStrategy functions. To do this, navigate to the /#code page on Etherscan.
-
-1. Click on the `More Options` drop-down menu
-2. Click "is this a proxy?"
-3. Click the "Verify" button
-4. Click "Save"
-
-This should add all of the external `TokenizedStrategy` functions to the contract interface on Etherscan.
-
-## CI
-
-This repo uses [GitHub Actions](.github/workflows) for CI. There are three workflows: lint, test and slither for static analysis.
-
-To enable test workflow you need to add the `ETH_RPC_URL` secret to your repo. For more info see [GitHub Actions docs](https://docs.github.com/en/codespaces/managing-codespaces-for-your-organization/managing-encrypted-secrets-for-your-repository-and-organization-for-github-codespaces#adding-secrets-for-a-repository).
-
-If the slither finds some issues that you want to suppress, before the issue add comment: `//slither-disable-next-line DETECTOR_NAME`. For more info about detectors see [Slither docs](https://github.com/crytic/slither/wiki/Detector-Documentation).
-
-### Coverage
-
-If you want to use [`coverage.yml`](.github/workflows/coverage.yml) workflow on other chains than mainnet, you need to add the additional `CHAIN_RPC_URL` secret.
-
-Coverage workflow will generate coverage summary and attach it to PR as a comment. To enable this feature you need to add the [`GH_TOKEN`](.github/workflows/coverage.yml#L53) secret to your Github repo. Token must have permission to "Read and Write access to pull requests". To generate token go to [Github settings page](https://github.com/settings/tokens?type=beta). For more info see [GitHub Access Tokens](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+Contract loaders preserve Brownie's global deployment cache. Use `VERBOSE=true`
+for full addresses and pool history in maintenance output.

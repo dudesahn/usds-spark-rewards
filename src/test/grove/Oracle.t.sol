@@ -74,7 +74,7 @@ contract V4SimulatorHarness {
     }
 }
 
-contract OracleTest is Test {
+contract GroveOracleTest is Test {
     using PoolIdLibrary for PoolKey;
 
     GroveCompounderAprOracle public oracle;

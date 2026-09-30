@@ -2,9 +2,9 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {Setup, ERC20, IStrategyInterface} from "src/test/utils/Setup.sol";
+import {GroveSetup, ERC20, IGroveCompounder} from "src/test/grove/utils/Setup.sol";
 
-contract FunctionSignatureTest is Setup {
+contract GroveFunctionSignatureTest is GroveSetup {
     function setUp() public virtual override {
         super.setUp();
     }

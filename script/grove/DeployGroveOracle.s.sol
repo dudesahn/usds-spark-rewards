@@ -10,16 +10,16 @@ import {console2} from "forge-std/console2.sol";
 // python3 scripts/generate_grove_pool_config.py --check
 //
 // Dry run:
-// forge script script/DeployOracleV2.s.sol:DeployOracleV2 --rpc-url "$ETH_RPC_URL" --account llc2 -vvvvv --optimize true
+// forge script script/grove/DeployGroveOracle.s.sol:DeployGroveOracle --rpc-url "$PUBLICNODE_ETH_RPC_URL" --account llc2 -vvvvv --optimize true
 //
 // Broadcast:
-// forge script script/DeployOracleV2.s.sol:DeployOracleV2 --rpc-url "$ETH_RPC_URL" --account llc2 -vvvvv --optimize true --slow --broadcast
+// forge script script/grove/DeployGroveOracle.s.sol:DeployGroveOracle --rpc-url "$PUBLICNODE_ETH_RPC_URL" --account llc2 -vvvvv --optimize true --slow --broadcast
 
 /// @notice Deploys only the replacement APR oracle. The existing strategy is reused.
 /// @dev After deployment, register the new oracle for the existing strategy in
 ///      Yearn's APR oracle and update MAINNET_GROVE_APR_ORACLE in the maintenance
 ///      script defaults. Until a Kyber reference is submitted, the oracle uses V4.
-contract DeployOracleV2 is Script {
+contract DeployGroveOracle is Script {
     function run() external {
         vm.startBroadcast();
 

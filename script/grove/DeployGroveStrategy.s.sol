@@ -6,14 +6,14 @@ import {Script} from "forge-std/Script.sol";
 import {console2} from "forge-std/console2.sol";
 
 // Dry run:
-// forge script script/DeployStrategy.s.sol:DeployStrategy --rpc-url "$ETH_RPC_URL" --account llc2 -vvvvv --optimize true
+// forge script script/grove/DeployGroveStrategy.s.sol:DeployGroveStrategy --rpc-url "$PUBLICNODE_ETH_RPC_URL" --account llc2 -vvvvv --optimize true
 //
 // Broadcast:
-// forge script script/DeployStrategy.s.sol:DeployStrategy --rpc-url "$ETH_RPC_URL" --account llc2 -vvvvv --optimize true --slow --broadcast
+// forge script script/grove/DeployGroveStrategy.s.sol:DeployGroveStrategy --rpc-url "$PUBLICNODE_ETH_RPC_URL" --account llc2 -vvvvv --optimize true --slow --broadcast
 // Deployed for convertor for yvUSD: 0x47c640fDA687B7D20d50D4464e302e36D3D312Ed
 
 /// @notice Deploys a new GroveCompounder strategy without deploying an APR oracle.
-contract DeployStrategy is Script {
+contract DeployGroveStrategy is Script {
     function run() external {
         vm.startBroadcast();
 

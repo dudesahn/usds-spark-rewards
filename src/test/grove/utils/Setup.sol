@@ -5,7 +5,7 @@ import {console2} from "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {GroveCompounder, ERC20, Auction, IStaking} from "src/GroveCompounder.sol";
-import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
+import {IGroveCompounder} from "src/interfaces/IGroveCompounder.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -20,12 +20,12 @@ interface IFactory {
     function set_protocol_fee_recipient(address) external;
 }
 
-contract Setup is Test, IEvents {
+contract GroveSetup is Test, IEvents {
     address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
-    IStrategyInterface public strategy;
+    IGroveCompounder public strategy;
 
     // auction to be used by our strategy
     Auction public auction;
@@ -73,7 +73,7 @@ contract Setup is Test, IEvents {
         staking = 0x4E41488C19cD35EB4de3083Fc3e204854c75c86a;
 
         // Deploy strategy and set variables
-        strategy = IStrategyInterface(setUpStrategy());
+        strategy = IGroveCompounder(setUpStrategy());
         auction = Auction(strategy.auction());
 
         // set min amount to sell super low for testing ~($1.50)
@@ -104,9 +104,9 @@ contract Setup is Test, IEvents {
     }
 
     function setUpStrategy() public returns (address) {
-        // we save the strategy as a IStrategyInterface to give it the needed interface
+        // we save the strategy as a IGroveCompounder to give it the needed interface
         vm.startPrank(management);
-        IStrategyInterface _strategy = IStrategyInterface(address(new GroveCompounder()));
+        IGroveCompounder _strategy = IGroveCompounder(address(new GroveCompounder()));
 
         // setup the strategy
         _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
@@ -162,7 +162,7 @@ contract Setup is Test, IEvents {
         assertEq(rewardBalance, 0, "!rewardBalance");
     }
 
-    function depositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
+    function depositIntoStrategy(IGroveCompounder _strategy, address _user, uint256 _amount) public {
         vm.prank(_user);
         asset.approve(address(_strategy), _amount);
 
@@ -170,14 +170,14 @@ contract Setup is Test, IEvents {
         _strategy.deposit(_amount, _user);
     }
 
-    function mintAndDepositIntoStrategy(IStrategyInterface _strategy, address _user, uint256 _amount) public {
+    function mintAndDepositIntoStrategy(IGroveCompounder _strategy, address _user, uint256 _amount) public {
         airdrop(asset, _user, _amount);
         depositIntoStrategy(_strategy, _user, _amount);
     }
 
     // For checking the amounts in the strategy
     function checkStrategyTotals(
-        IStrategyInterface _strategy,
+        IGroveCompounder _strategy,
         uint256 _totalAssets,
         uint256 _totalDebt,
         uint256 _totalIdle

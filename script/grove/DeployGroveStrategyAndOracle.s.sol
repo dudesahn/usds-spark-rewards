@@ -11,23 +11,23 @@ import {console2} from "forge-std/console2.sol";
 // This script deployed:
 //   GroveCompounderAprOracle: 0xED85bB86BDef06EF7312eD1bd3f80A4C2f957f56
 //   GroveCompounder strategy: 0xe060B80438771f13078048c3b0d930efECA6E622
-// The replacement oracle is deployed with DeployOracleV2.s.sol.
+// The replacement oracle is deployed with DeployGroveOracle.s.sol.
 
 // ---- Usage ----
 // First verify that the generated deployment snapshot matches its JSON source:
 // python3 scripts/generate_grove_pool_config.py --check
 //
-// forge script script/DeployStrategyAndOracle.s.sol:DeployStrategyAndOracle --rpc-url "$ETH_RPC_URL" --account llc2 -vvvvv --optimize true
+// forge script script/grove/DeployGroveStrategyAndOracle.s.sol:DeployGroveStrategyAndOracle --rpc-url "$ETH_RPC_URL" --account llc2 -vvvvv --optimize true
 
 // do real deployment, try slow to see if that helps w/ verification
-// forge script script/DeployStrategyAndOracle.s.sol:DeployStrategyAndOracle --rpc-url "$ETH_RPC_URL" --account llc2 -vvvvv --optimize true --etherscan-api-key $ETHERSCAN_TOKEN --slow --verify --broadcast
+// forge script script/grove/DeployGroveStrategyAndOracle.s.sol:DeployGroveStrategyAndOracle --rpc-url "$ETH_RPC_URL" --account llc2 -vvvvv --optimize true --etherscan-api-key $ETHERSCAN_TOKEN --slow --verify --broadcast
 
 // verify:
 // needed to manually verify, can copy-paste abi-encoded constructor args from the printed output of the deployment. this command ends with the address and contract to verify, always
 // no constructor (or thus, constructor args) on this one
 // forge verify-contract --rpc-url "$ETH_RPC_URL" --watch --etherscan-api-key $ETHERSCAN_TOKEN "0x1a5579C4fBcC89Cc8ae46D551C53d7cecc9bD046" GroveCompounderAprOracle
 
-contract DeployStrategyAndOracle is Script {
+contract DeployGroveStrategyAndOracle is Script {
     function run() external {
         vm.startBroadcast();
 

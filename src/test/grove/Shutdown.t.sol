@@ -1,8 +1,8 @@
 pragma solidity ^0.8.18;
 
-import {Setup, ERC20} from "src/test/utils/Setup.sol";
+import {GroveSetup, ERC20} from "src/test/grove/utils/Setup.sol";
 
-contract ShutdownTest is Setup {
+contract GroveShutdownTest is GroveSetup {
     function setUp() public virtual override {
         super.setUp();
     }

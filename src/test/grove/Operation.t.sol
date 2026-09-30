@@ -3,9 +3,9 @@ pragma solidity ^0.8.18;
 
 import {console2} from "forge-std/console2.sol";
 import {AuctionFactory} from "@periphery/Auctions/AuctionFactory.sol";
-import {Setup, ERC20} from "src/test/utils/Setup.sol";
+import {GroveSetup, ERC20} from "src/test/grove/utils/Setup.sol";
 
-contract OperationTest is Setup {
+contract GroveOperationTest is GroveSetup {
     function setUp() public virtual override {
         super.setUp();
     }
