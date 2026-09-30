@@ -103,6 +103,8 @@ library UniswapV4SwapSimulator {
                     );
             }
 
+            // Every Step field is assigned below before its first read.
+            // slither-disable-next-line uninitialized-local
             Step memory step;
             step.sqrtPriceStartX96 = state.sqrtPriceX96;
             (
