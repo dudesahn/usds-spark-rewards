@@ -40,6 +40,9 @@ class FakeOracle:
         self.pool_ids = list(registry["oracle_pool_ids"])
         self.quote_tokens = [entries[pool_id]["quote_token"] for pool_id in self.pool_ids]
         self.set_calls = 0
+        self.flows = {}
+        self.setUniV4Pools = Mock(side_effect=self._set_pools)
+        self.setUniV4Pools.call = Mock()
 
     def uniV4PoolCount(self):
         return len(self.pool_ids)
@@ -50,9 +53,23 @@ class FakeOracle:
     def MAX_V4_POOLS(self):
         return 10
 
-    def setUniV4Pools(self, pool_ids, transaction):
+    def management(self):
+        return "0xmanager"
+
+    def GROVE_PRICE_QUOTE_AMOUNT(self):
+        return 10_000 * 10**18
+
+    def quoteUniV4Route(self):
+        inputs = [self.flows.get(pool, (0, 0))[0] for pool in self.pool_ids]
+        outputs = [self.flows.get(pool, (0, 0))[1] for pool in self.pool_ids]
+        return (sum(outputs), sum(inputs), 0, self.pool_ids, inputs, outputs)
+
+    def _set_pools(self, pool_ids, transaction):
         self.set_calls += 1
+        tokens = dict(zip(self.pool_ids, self.quote_tokens))
+        self.quote_tokens = [tokens.get(pool, common_module.USDC.lower()) for pool in pool_ids]
         self.pool_ids = list(pool_ids)
+        return types.SimpleNamespace(txid="0xpools")
 
 
 class FakePriceOracle:
@@ -447,6 +464,7 @@ class MaintenancePolicyTest(unittest.TestCase):
 
     def test_malformed_kyber_pool_id_is_rejected(self):
         route = {
+            "amountIn": str(10_000 * 10**18),
             "route": [
                 [
                     {

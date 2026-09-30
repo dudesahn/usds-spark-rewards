@@ -1,6 +1,7 @@
 """Validation and Solidity generation for the GROVE V4 pool registry."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -38,8 +39,11 @@ def load_registry(path=REGISTRY_PATH):
     except (OSError, ValueError) as error:
         raise RuntimeError("Could not load pool registry {}: {}".format(path, error))
 
-    if registry.get("version") != 2:
+    if registry.get("version") not in (2, 3):
         raise RuntimeError("Unsupported pool registry version")
+    # Discovery alone did not prove positive flow. Preserve legacy last_seen
+    # fields, but start contribution history as unknown until it is measured.
+    registry["version"] = 3
     if registry.get("base_token", "").lower() != GROVE.lower():
         raise RuntimeError("Pool registry base token is not GROVE")
     quote_tokens = {token.lower() for token in registry.get("quote_tokens", [])}
@@ -61,6 +65,29 @@ def load_registry(path=REGISTRY_PATH):
             )
         entry["quote_token"] = quote_token
         entry["last_seen_block"] = int(entry.get("last_seen_block") or 0)
+        entry.setdefault("last_contributed_block", 0)
+        entry.setdefault("last_contributed_at", None)
+        entry.setdefault("last_contribution_sources", [])
+        entry.setdefault("last_contribution_quote_sizes", [])
+        block = entry["last_contributed_block"]
+        if isinstance(block, bool) or not isinstance(block, int) or block < 0:
+            raise RuntimeError("Invalid contribution block for {}".format(pool_id))
+        observed_at = entry["last_contributed_at"]
+        if bool(block) != bool(observed_at):
+            raise RuntimeError("Incomplete contribution timestamp for {}".format(pool_id))
+        if observed_at:
+            try:
+                parsed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    raise ValueError("timezone required")
+            except (AttributeError, TypeError, ValueError) as error:
+                raise RuntimeError("Invalid contribution timestamp for {}".format(pool_id)) from error
+        sources = entry["last_contribution_sources"]
+        sizes = entry["last_contribution_quote_sizes"]
+        if not isinstance(sources, list) or any(source not in ("kyber", "oracle") for source in sources):
+            raise RuntimeError("Invalid contribution sources for {}".format(pool_id))
+        if not isinstance(sizes, list) or any(type(size) is not int or size <= 0 for size in sizes):
+            raise RuntimeError("Invalid contribution quote sizes for {}".format(pool_id))
         entries_by_id[pool_id] = entry
 
     oracle_pool_ids = [validate_pool_id(pool_id) for pool_id in registry.get("oracle_pool_ids", [])]
